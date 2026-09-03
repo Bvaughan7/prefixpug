@@ -70,4 +70,11 @@ pub enum Commands {
         #[arg(short, long, value_name = "DEST")]
         target: Option<PathBuf>,
     },
+
+    /// Generate shell completions (bash, zsh, fish, powershell, elvish)
+    Completions {
+        /// Target shell
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
 }

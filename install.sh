@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# PrefixPug Local Installer
+echo -e "\033[1;35m⚡ PREFIXPUG :: Installing PrefixPug locally...\033[0m"
+
+INSTALL_DIR="${HOME}/.local/bin"
+mkdir -p "${INSTALL_DIR}"
+
+echo "Compiling optimized release binary..."
+cargo build --release
+
+echo "Installing binary to ${INSTALL_DIR}/prefixpug..."
+cp target/release/prefixpug "${INSTALL_DIR}/prefixpug"
+chmod +x "${INSTALL_DIR}/prefixpug"
+
+# Shell completions
+if [ -d "${HOME}/.local/share/bash-completion/completions" ]; then
+    echo "Installing bash completions..."
+    "${INSTALL_DIR}/prefixpug" completions bash > "${HOME}/.local/share/bash-completion/completions/prefixpug"
+fi
+
+if [ -d "${HOME}/.zfunc" ]; then
+    echo "Installing zsh completions to ~/.zfunc/_prefixpug..."
+    "${INSTALL_DIR}/prefixpug" completions zsh > "${HOME}/.zfunc/_prefixpug"
+fi
+
+if [ -d "${HOME}/.config/fish/completions" ]; then
+    echo "Installing fish completions..."
+    "${INSTALL_DIR}/prefixpug" completions fish > "${HOME}/.config/fish/completions/prefixpug.fish"
+fi
+
+echo -e "\033[1;32m✓ PrefixPug successfully installed to ${INSTALL_DIR}/prefixpug\033[0m"
+
+if ! echo "${PATH}" | grep -q "${HOME}/.local/bin"; then
+    echo -e "\033[1;33mNote: Make sure ~/.local/bin is in your PATH (e.g. export PATH=\"\$HOME/.local/bin:\$PATH\")\033[0m"
+fi
+
+echo -e "Run \033[1;36mprefixpug\033[0m or \033[1;36mprefixpug --help\033[0m to get started!"

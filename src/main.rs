@@ -1,7 +1,7 @@
 use prefixpug::{backup, cli, scanner, tui, vdf_parser};
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
     execute,
@@ -404,6 +404,11 @@ fn main() -> Result<()> {
         Some(Commands::Restore { backup_id, target }) => {
             return run_restore_command(backup_id, &backup_dir, target.clone());
         }
+        Some(Commands::Completions { shell }) => {
+            let mut cmd = Cli::command();
+            clap_complete::generate(*shell, &mut cmd, "prefixpug", &mut std::io::stdout());
+            return Ok(());
+        }
         _ => {}
     }
 
@@ -428,7 +433,9 @@ fn main() -> Result<()> {
         Some(Commands::Clean { appids }) => {
             run_clean_command(&cli, &orphans, appids, &backup_dir)?;
         }
-        Some(Commands::Backups) | Some(Commands::Restore { .. }) => unreachable!(),
+        Some(Commands::Backups)
+        | Some(Commands::Restore { .. })
+        | Some(Commands::Completions { .. }) => unreachable!(),
         None => {
             if cli.no_tui || cli.dry_run || cli.auto_clean || cli.json {
                 if cli.auto_clean {
