@@ -49,7 +49,9 @@ fn color_to_rgb(c: ratatui::style::Color) -> (u8, u8, u8) {
 }
 
 fn capture_frame(terminal: &mut Terminal<TestBackend>, app: &App) -> RenderFrame {
-    terminal.draw(|f| prefixpug::tui::ui::render(f, app)).expect("draw");
+    terminal
+        .draw(|f| prefixpug::tui::ui::render(f, app))
+        .expect("draw");
     let buf = terminal.backend().buffer();
     let area = buf.area;
 
@@ -172,7 +174,10 @@ fn main() {
         },
     ];
 
-    let mut app = App::new(mock_orphans, PathBuf::from("/home/papab/.local/share/prefixpug/backups"));
+    let mut app = App::new(
+        mock_orphans,
+        PathBuf::from("/home/papab/.local/share/prefixpug/backups"),
+    );
 
     let mut frame_id = 0;
 
