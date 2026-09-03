@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use super::app::{App, AppState};
+use super::app::{App, AppState, SortMode};
 
 const NEON_PINK: Color = Color::Rgb(255, 20, 147);
 const NEON_CYAN: Color = Color::Rgb(0, 245, 255);
@@ -89,12 +89,21 @@ fn render_header(f: &mut Frame, area: Rect) {
 }
 
 fn render_orphan_list(f: &mut Frame, app: &App, area: Rect) {
+    let sort_label = match app.sort_mode {
+        SortMode::Size => "Size",
+        SortMode::Age => "Age",
+        SortMode::AppId => "AppID",
+    };
+
     let title = if app.state == AppState::Filtering {
         format!(" [ Filter: {}_ ] ", app.filter_query)
     } else if !app.filter_query.is_empty() {
-        format!(" [ Sniffed Orphans (Filter: {}) ] ", app.filter_query)
+        format!(
+            " [ Prefixes (Filter: {}, Sort: {}) ] ",
+            app.filter_query, sort_label
+        )
     } else {
-        " [ Sniffed Orphan Prefixes ] ".to_string()
+        format!(" [ Prefixes (Sort: {}) ] ", sort_label)
     };
 
     let block = Block::default()
@@ -118,12 +127,10 @@ fn render_orphan_list(f: &mut Frame, app: &App, area: Rect) {
         } else {
             "  🔍 No prefixes match the current filter."
         };
-        let empty_p = Paragraph::new(vec![
-            Line::from(""),
-            Line::from(Span::styled(msg, Style::default().fg(NEON_YELLOW))),
-        ])
-        .block(block);
-        f.render_widget(empty_p, area);
+        let p = Paragraph::new(msg)
+            .style(Style::default().fg(Color::Gray))
+            .block(block);
+        f.render_widget(p, area);
         return;
     }
 
@@ -131,50 +138,34 @@ fn render_orphan_list(f: &mut Frame, app: &App, area: Rect) {
         .filtered_indices
         .iter()
         .enumerate()
-        .map(|(disp_idx, &actual_idx)| {
-            let orphan = &app.all_orphans[actual_idx];
-            let is_cursor = disp_idx == app.cursor_index;
+        .map(|(list_idx, &orphan_idx)| {
+            let orphan = &app.all_orphans[orphan_idx];
+            let is_cursor = list_idx == app.cursor_index;
             let is_selected = app.selected_appids.contains(&orphan.appid);
 
-            let checkbox = if is_selected {
-                Span::styled(
-                    "[■] ",
+            let cursor_mark = if is_cursor { "▶" } else { " " };
+
+            let (check_box, check_style) = if !orphan.is_deletable() {
+                ("[P]", Style::default().fg(Color::DarkGray))
+            } else if is_selected {
+                (
+                    "[■]",
                     Style::default().fg(NEON_PINK).add_modifier(Modifier::BOLD),
                 )
             } else {
-                Span::styled("[ ] ", Style::default().fg(Color::DarkGray))
+                ("[ ]", Style::default().fg(Color::DarkGray))
             };
 
-            let appid_text = format!("AppID: {:<7}", orphan.appid);
-            let name_text = match &orphan.title {
+            let title_display = match &orphan.title {
                 Some(t) => {
-                    let mut s = t.clone();
-                    if s.len() > 14 {
-                        s.truncate(12);
-                        s.push_str("..");
+                    if t.len() > 14 {
+                        format!("{}...", &t[..11])
+                    } else {
+                        format!("{:<14}", t)
                     }
-                    format!(" {:<14}", s)
                 }
-                None => " {:<14}".replace("{:<14}", " (unknown)    "),
+                None => format!("{:<14}", "Unknown"),
             };
-
-            let appid_span = Span::styled(
-                appid_text,
-                if is_cursor {
-                    Style::default()
-                        .fg(NEON_YELLOW)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(Color::White)
-                },
-            );
-
-            let name_span = Span::styled(name_text, Style::default().fg(NEON_PURPLE));
-
-            let size_span = Span::styled(
-                format!(" {:>9}", format_bytes(orphan.total_size())),
-                Style::default().fg(NEON_CYAN),
-            );
 
             let saves_span = if !orphan.detected_saves.is_empty() {
                 Span::styled(
@@ -185,17 +176,53 @@ fn render_orphan_list(f: &mut Frame, app: &App, area: Rect) {
                 Span::styled("   --        ", Style::default().fg(Color::DarkGray))
             };
 
-            let indicator = if is_cursor {
-                Span::styled(
-                    "▶ ",
-                    Style::default().fg(NEON_PINK).add_modifier(Modifier::BOLD),
-                )
-            } else {
-                Span::raw("  ")
-            };
+            let status_badge = Span::styled(
+                format!(" {:<10}", orphan.classification.badge()),
+                match orphan.classification {
+                    crate::vdf_parser::PrefixClassification::Orphaned => {
+                        Style::default().fg(NEON_PINK)
+                    }
+                    crate::vdf_parser::PrefixClassification::LiveGame(_) => {
+                        Style::default().fg(NEON_GREEN)
+                    }
+                    crate::vdf_parser::PrefixClassification::NonSteamShortcut(_) => {
+                        Style::default().fg(NEON_CYAN)
+                    }
+                    crate::vdf_parser::PrefixClassification::SteamInfrastructure(_) => {
+                        Style::default().fg(NEON_PURPLE)
+                    }
+                    crate::vdf_parser::PrefixClassification::Unknown => {
+                        Style::default().fg(Color::DarkGray)
+                    }
+                },
+            );
 
             let spans = vec![
-                indicator, checkbox, appid_span, name_span, size_span, saves_span,
+                Span::styled(
+                    format!("{} ", cursor_mark),
+                    Style::default().fg(NEON_PINK).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(format!("{} ", check_box), check_style),
+                Span::styled(
+                    format!("AppID: {:<7} ", orphan.appid),
+                    Style::default().fg(NEON_YELLOW),
+                ),
+                Span::styled(
+                    format!("{} ", title_display),
+                    Style::default()
+                        .fg(if is_cursor { Color::White } else { NEON_PURPLE })
+                        .add_modifier(if is_cursor {
+                            Modifier::BOLD
+                        } else {
+                            Modifier::empty()
+                        }),
+                ),
+                Span::styled(
+                    format!(" {:>9}", format_bytes(orphan.total_size())),
+                    Style::default().fg(NEON_CYAN),
+                ),
+                saves_span,
+                status_badge,
             ];
 
             let line = Line::from(spans);
@@ -214,69 +241,76 @@ fn render_orphan_list(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_pug_and_details(f: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(11), Constraint::Min(6)])
-        .split(area);
+    if app.show_mascot {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(11), Constraint::Min(6)])
+            .split(area);
 
-    // Neon Cyberpug Mascot with animated sniffing frames
-    let anim_cycle = (app.animation_frame / 4) % 6;
-    let (snout, particles, action_text) = match anim_cycle {
-        0 => ("( •ᴥ•) ", "  *sniff*     ", "Sniffing prefix storage..."),
-        1 => ("( •ᴥ•) ", "  ~ ~ *snort* ", "Scanning Wine registry..."),
-        2 => ("( ⊙ᴥ⊙)", "  **SNIFF!**  ", "Digging up save candidates!"),
-        3 => ("( ⊙ᴥ⊙)", "  ~ *dig dig* ", "Burying saves in vault..."),
-        4 => ("( -ᴥ- )", "  zzz...      ", "Reclaiming NVMe sectors..."),
-        _ => ("( ◕ᴥ◕)", "  ~ *pant*    ", "Cyberpug is on the prowl."),
-    };
+        // Mascot
+        let anim_cycle = (app.animation_frame / 4) % 6;
+        let (snout, particles, action_text) = match anim_cycle {
+            0 => ("( •ᴥ•) ", "  *sniff*     ", "Sniffing prefix storage..."),
+            1 => ("( •ᴥ•) ", "  ~ ~ *snort* ", "Scanning Wine registry..."),
+            2 => ("( ⊙ᴥ⊙)", "  **SNIFF!**  ", "Digging up save candidates!"),
+            3 => ("( ⊙ᴥ⊙)", "  ~ *dig dig* ", "Burying saves in vault..."),
+            4 => ("( -ᴥ- )", "  zzz...      ", "Reclaiming NVMe sectors..."),
+            _ => ("( ◕ᴥ◕)", "  ~ *pant*    ", "Cyberpug is on the prowl."),
+        };
 
-    let pug_art = vec![
-        Line::from(vec![Span::styled(
-            "      ┌──────────────────────┐",
-            Style::default().fg(NEON_PINK),
-        )]),
-        Line::from(vec![
-            Span::styled(" /\\_/\\│ ", Style::default().fg(NEON_CYAN)),
-            Span::styled(
-                "CYBERPUG NEON M-01",
-                Style::default()
-                    .fg(NEON_YELLOW)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("   │", Style::default().fg(NEON_PINK)),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                format!(" {}│ ", snout),
-                Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                particles,
-                Style::default().fg(NEON_PINK).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("      │", Style::default().fg(NEON_PINK)),
-        ]),
-        Line::from(vec![
-            Span::styled(" /    \\│ ", Style::default().fg(NEON_CYAN)),
-            Span::styled(action_text, Style::default().fg(NEON_PURPLE)),
-        ]),
-        Line::from(vec![
-            Span::styled("( \"  \" )", Style::default().fg(NEON_CYAN)),
-            Span::styled("└──────────────────────┘", Style::default().fg(NEON_PINK)),
-        ]),
-    ];
+        let pug_art = vec![
+            Line::from(vec![Span::styled(
+                "      ┌──────────────────────┐",
+                Style::default().fg(NEON_PINK),
+            )]),
+            Line::from(vec![
+                Span::styled(" /\\_/\\│ ", Style::default().fg(NEON_CYAN)),
+                Span::styled(
+                    "CYBERPUG NEON M-01",
+                    Style::default()
+                        .fg(NEON_YELLOW)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("   │", Style::default().fg(NEON_PINK)),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    format!(" {}│ ", snout),
+                    Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    particles,
+                    Style::default().fg(NEON_PINK).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("      │", Style::default().fg(NEON_PINK)),
+            ]),
+            Line::from(vec![
+                Span::styled(" /    \\│ ", Style::default().fg(NEON_CYAN)),
+                Span::styled(action_text, Style::default().fg(NEON_PURPLE)),
+            ]),
+            Line::from(vec![
+                Span::styled("( \"  \" )", Style::default().fg(NEON_CYAN)),
+                Span::styled("└──────────────────────┘", Style::default().fg(NEON_PINK)),
+            ]),
+        ];
 
-    let pug_block = Block::default()
-        .title(" [ Mascot: Cyberpug ] ")
-        .title_style(Style::default().fg(NEON_PINK))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Thick)
-        .border_style(Style::default().fg(NEON_PINK));
+        let pug_block = Block::default()
+            .title(" [ Mascot: Cyberpug ] ")
+            .title_style(Style::default().fg(NEON_PINK))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Thick)
+            .border_style(Style::default().fg(NEON_PINK));
 
-    let pug_widget = Paragraph::new(pug_art).block(pug_block);
-    f.render_widget(pug_widget, chunks[0]);
+        let pug_widget = Paragraph::new(pug_art).block(pug_block);
+        f.render_widget(pug_widget, chunks[0]);
 
-    // Inspector Pane
+        render_inspector(f, app, chunks[1]);
+    } else {
+        render_inspector(f, app, area);
+    }
+}
+
+fn render_inspector(f: &mut Frame, app: &App, area: Rect) {
     let inspector_block = Block::default()
         .title(" [ Prefix Inspector ] ")
         .title_style(Style::default().fg(NEON_CYAN))
@@ -293,6 +327,22 @@ fn render_pug_and_details(f: &mut Frame, app: &App, area: Rect) {
                         .fg(NEON_YELLOW)
                         .add_modifier(Modifier::BOLD),
                 ),
+                Span::styled("  Status: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    orphan.classification.badge(),
+                    match orphan.classification {
+                        crate::vdf_parser::PrefixClassification::Orphaned => {
+                            Style::default().fg(NEON_PINK)
+                        }
+                        crate::vdf_parser::PrefixClassification::LiveGame(_) => {
+                            Style::default().fg(NEON_GREEN)
+                        }
+                        crate::vdf_parser::PrefixClassification::NonSteamShortcut(_) => {
+                            Style::default().fg(NEON_CYAN)
+                        }
+                        _ => Style::default().fg(NEON_PURPLE),
+                    },
+                ),
             ]),
             Line::from(vec![
                 Span::styled("Title:        ", Style::default().fg(Color::Gray)),
@@ -302,37 +352,61 @@ fn render_pug_and_details(f: &mut Frame, app: &App, area: Rect) {
                 ),
             ]),
             Line::from(vec![
-                Span::styled("Compatdata:   ", Style::default().fg(Color::Gray)),
+                Span::styled("Apparent:     ", Style::default().fg(Color::Gray)),
                 Span::styled(
-                    format_bytes(orphan.compatdata_size),
+                    format_bytes(orphan.total_apparent_bytes()),
                     Style::default().fg(NEON_CYAN),
+                ),
+                Span::styled("  Allocated: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format_bytes(orphan.total_allocated_bytes()),
+                    Style::default().fg(NEON_PURPLE),
                 ),
             ]),
             Line::from(vec![
-                Span::styled("Shadercache:  ", Style::default().fg(Color::Gray)),
-                Span::styled(
-                    format_bytes(orphan.shadercache_size),
-                    Style::default().fg(NEON_CYAN),
-                ),
+                Span::styled("Last Touched: ", Style::default().fg(Color::Gray)),
+                Span::styled(orphan.age_display(), Style::default().fg(NEON_YELLOW)),
             ]),
-            Line::from(vec![
-                Span::styled("Total Size:   ", Style::default().fg(Color::Gray)),
-                Span::styled(
-                    format_bytes(orphan.total_size()),
-                    Style::default().fg(NEON_PINK).add_modifier(Modifier::BOLD),
-                ),
-            ]),
-            Line::from(""),
-            Line::from(Span::styled(
-                format!("Sniffed Save Files ({}):", orphan.detected_saves.len()),
-                Style::default().fg(NEON_YELLOW),
-            )),
         ];
 
-        for save in orphan.detected_saves.iter().take(4) {
+        if orphan.is_high_value {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    "⚠ WARNING:    ",
+                    Style::default()
+                        .fg(NEON_YELLOW)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "High-value prefix (mods / protontricks detected)",
+                    Style::default().fg(NEON_YELLOW),
+                ),
+            ]));
+            for reason in &orphan.high_value_reasons {
+                lines.push(Line::from(vec![
+                    Span::styled("   • ", Style::default().fg(NEON_YELLOW)),
+                    Span::styled(reason, Style::default().fg(Color::LightYellow)),
+                ]));
+            }
+        }
+
+        for warning in &orphan.warnings {
+            lines.push(Line::from(vec![
+                Span::styled(" ⚠ ", Style::default().fg(NEON_YELLOW)),
+                Span::styled(warning, Style::default().fg(Color::LightRed)),
+            ]));
+        }
+
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            format!("Sniffed Save Files ({}):", orphan.detected_saves.len()),
+            Style::default().fg(NEON_YELLOW),
+        )));
+
+        for save in orphan.detected_saves.iter().take(6) {
             let path_str = save.path.to_string_lossy();
-            let truncated = if path_str.len() > 36 {
-                format!("...{}", &path_str[path_str.len() - 33..])
+            let truncated = if path_str.len() > 38 {
+                format!("...{}", &path_str[path_str.len() - 35..])
             } else {
                 path_str.to_string()
             };
@@ -346,12 +420,9 @@ fn render_pug_and_details(f: &mut Frame, app: &App, area: Rect) {
             ]));
         }
 
-        if orphan.detected_saves.len() > 4 {
+        if orphan.detected_saves.len() > 6 {
             lines.push(Line::from(Span::styled(
-                format!(
-                    "   ...and {} more save files",
-                    orphan.detected_saves.len() - 4
-                ),
+                format!("   ... and {} more files", orphan.detected_saves.len() - 6),
                 Style::default().fg(Color::DarkGray),
             )));
         }
@@ -359,46 +430,51 @@ fn render_pug_and_details(f: &mut Frame, app: &App, area: Rect) {
         lines
     } else {
         vec![Line::from(Span::styled(
-            "No prefix selected.",
-            Style::default().fg(Color::DarkGray),
+            "Select a prefix from the list to inspect details.",
+            Style::default().fg(Color::Gray),
         ))]
     };
 
-    let inspector_widget = Paragraph::new(details).block(inspector_block);
-    f.render_widget(inspector_widget, chunks[1]);
+    let p = Paragraph::new(details).block(inspector_block);
+    f.render_widget(p, area);
 }
 
 fn render_reclaim_progress(f: &mut Frame, app: &App, area: Rect) {
     let total_reclaimable = app.total_orphans_size();
-    let selected_size = app.selected_total_size();
+    let selected_bytes = app.selected_total_size();
 
     let ratio = if total_reclaimable > 0 {
-        (selected_size as f64 / total_reclaimable as f64).clamp(0.0, 1.0)
+        (selected_bytes as f64 / total_reclaimable as f64).clamp(0.0, 1.0)
     } else {
         0.0
     };
 
-    let gauge_title = format!(
-        " Reclamation Target: {} / {} ({:.1}%) ",
-        format_bytes(selected_size),
+    let label = format!(
+        "Reclamation Target: {} / {} ({:.1}%)",
+        format_bytes(selected_bytes),
         format_bytes(total_reclaimable),
         ratio * 100.0
     );
 
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(NEON_CYAN))
+        .title(Span::styled(
+            label,
+            Style::default()
+                .fg(NEON_YELLOW)
+                .add_modifier(Modifier::BOLD),
+        ));
+
     let gauge = Gauge::default()
-        .block(
-            Block::default()
-                .title(gauge_title)
-                .title_style(
-                    Style::default()
-                        .fg(NEON_YELLOW)
-                        .add_modifier(Modifier::BOLD),
-                )
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(NEON_CYAN)),
+        .block(block)
+        .gauge_style(
+            Style::default()
+                .fg(NEON_PINK)
+                .bg(Color::Rgb(30, 15, 45))
+                .add_modifier(Modifier::BOLD),
         )
-        .gauge_style(Style::default().fg(NEON_PINK).bg(Color::Rgb(40, 20, 60)))
-        .ratio(ratio);
+        .percent((ratio * 100.0) as u16);
 
     f.render_widget(gauge, area);
 }
@@ -408,186 +484,232 @@ fn render_status_bar(f: &mut Frame, app: &App, area: Rect) {
         .borders(Borders::ALL)
         .border_style(Style::default().fg(NEON_PURPLE));
 
-    let content = Line::from(vec![
-        Span::styled(" [↑/↓] Move ", Style::default().fg(NEON_CYAN)),
-        Span::styled("[Space] Toggle ", Style::default().fg(NEON_CYAN)),
-        Span::styled("[a] All ", Style::default().fg(NEON_CYAN)),
-        Span::styled("[i] Invert ", Style::default().fg(NEON_CYAN)),
-        Span::styled("[/] Search ", Style::default().fg(NEON_CYAN)),
-        Span::styled(
-            "[c] Clean ",
-            Style::default()
-                .fg(NEON_YELLOW)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled("[?] Help ", Style::default().fg(NEON_GREEN)),
-        Span::styled("[q] Quit │ ", Style::default().fg(NEON_PINK)),
+    let shortcuts = Line::from(vec![
+        Span::styled("[↑/↓] ", Style::default().fg(NEON_CYAN)),
+        Span::styled("Move ", Style::default().fg(Color::Gray)),
+        Span::styled("[Space] ", Style::default().fg(NEON_CYAN)),
+        Span::styled("Toggle ", Style::default().fg(Color::Gray)),
+        Span::styled("[a] ", Style::default().fg(NEON_CYAN)),
+        Span::styled("All ", Style::default().fg(Color::Gray)),
+        Span::styled("[s] ", Style::default().fg(NEON_CYAN)),
+        Span::styled("Sort ", Style::default().fg(Color::Gray)),
+        Span::styled("[m] ", Style::default().fg(NEON_CYAN)),
+        Span::styled("Mascot ", Style::default().fg(Color::Gray)),
+        Span::styled("[c] ", Style::default().fg(NEON_YELLOW)),
+        Span::styled("Clean ", Style::default().fg(NEON_YELLOW)),
+        Span::styled("[?] ", Style::default().fg(NEON_GREEN)),
+        Span::styled("Help ", Style::default().fg(Color::Gray)),
+        Span::styled("[q] ", Style::default().fg(NEON_PINK)),
+        Span::styled("Quit ", Style::default().fg(Color::Gray)),
+        Span::styled("│ ", Style::default().fg(Color::DarkGray)),
         Span::styled(&app.status_message, Style::default().fg(Color::White)),
     ]);
 
-    let widget = Paragraph::new(content).block(block);
-    f.render_widget(widget, area);
+    let p = Paragraph::new(shortcuts).block(block);
+    f.render_widget(p, area);
 }
 
 fn render_confirm_dialog(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .title(" ⚠ CONFIRM COMPATDATA PURGE ⚠ ")
-        .title_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+        .title_style(
+            Style::default()
+                .fg(Color::Rgb(255, 69, 58))
+                .add_modifier(Modifier::BOLD),
+        )
         .borders(Borders::ALL)
         .border_type(BorderType::Double)
-        .border_style(Style::default().fg(Color::Red));
+        .border_style(Style::default().fg(Color::Rgb(255, 69, 58)));
 
-    let dialog_area = Rect {
-        x: area.width.saturating_sub(64) / 2,
-        y: area.height.saturating_sub(12) / 2,
-        width: 64.min(area.width),
-        height: 12.min(area.height),
-    };
+    let dialog_area = centered_rect(60, 45, area);
+    f.render_widget(Clear, dialog_area);
 
-    let count = app.selected_appids.len();
-    let bytes = app.selected_total_size();
+    let selected_count = app.selected_appids.len();
+    let reclaim_bytes = app.selected_total_size();
 
-    let text = vec![
+    let mut text = vec![
         Line::from(""),
-        Line::from(Span::styled(
-            format!(
-                " Reclaiming {} across {} orphaned prefix(es).",
-                format_bytes(bytes),
-                count
+        Line::from(vec![
+            Span::styled("  Reclaiming ", Style::default().fg(Color::White)),
+            Span::styled(
+                format_bytes(reclaim_bytes),
+                Style::default().fg(NEON_PINK).add_modifier(Modifier::BOLD),
             ),
-            Style::default()
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
-        )),
+            Span::styled(
+                format!(" across {} prefix(es).", selected_count),
+                Style::default().fg(Color::White),
+            ),
+        ]),
         Line::from(""),
         Line::from(Span::styled(
-            " ⚡ The Pug's Nose will bury (backup) all saves to:",
+            "  ⚡ The Pug's Nose will bury (backup) all saves to:",
             Style::default().fg(NEON_CYAN),
         )),
         Line::from(Span::styled(
-            format!(" {:?}", app.backup_dir),
+            format!("     \"{}\"", app.backup_dir.display()),
             Style::default().fg(NEON_YELLOW),
         )),
         Line::from(""),
         Line::from(Span::styled(
-            " Compatdata and shader caches will be permanently purged.",
-            Style::default().fg(Color::LightRed),
+            "  Compatdata and shader caches will be permanently purged.",
+            Style::default().fg(Color::Rgb(255, 120, 120)),
         )),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(" Press ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                "[Y]",
-                Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                " to confirm and purge, or ",
-                Style::default().fg(Color::Gray),
-            ),
-            Span::styled(
-                "[N / Esc]",
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(" to cancel.", Style::default().fg(Color::Gray)),
-        ]),
     ];
 
-    f.render_widget(Clear, dialog_area);
-    let p = Paragraph::new(text)
-        .block(block)
-        .alignment(Alignment::Center);
+    // Check if any selected is high-value
+    let has_high_value = app
+        .all_orphans
+        .iter()
+        .any(|o| app.selected_appids.contains(&o.appid) && o.is_high_value);
+
+    if has_high_value {
+        text.push(Line::from(""));
+        text.push(Line::from(Span::styled(
+            "  ⚠ WARNING: High-value prefixes (mod loaders / protontricks) selected!",
+            Style::default()
+                .fg(NEON_YELLOW)
+                .add_modifier(Modifier::BOLD),
+        )));
+    }
+
+    text.push(Line::from(""));
+    text.push(Line::from(vec![
+        Span::styled("  Press ", Style::default().fg(Color::White)),
+        Span::styled(
+            "[Y]",
+            Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " to confirm and purge, or ",
+            Style::default().fg(Color::White),
+        ),
+        Span::styled(
+            "[N / Esc]",
+            Style::default()
+                .fg(Color::Rgb(255, 69, 58))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" to cancel.", Style::default().fg(Color::White)),
+    ]));
+
+    let p = Paragraph::new(text).block(block);
     f.render_widget(p, dialog_area);
 }
 
 fn render_help_dialog(f: &mut Frame, area: Rect) {
     let block = Block::default()
-        .title(" ⚡ PREFIXPUG CONTROL MATRIX & HELP ⚡ ")
-        .title_style(
-            Style::default()
-                .fg(NEON_YELLOW)
-                .add_modifier(Modifier::BOLD),
-        )
+        .title(" [ Control Matrix ] ")
+        .title_style(Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD))
         .borders(Borders::ALL)
         .border_type(BorderType::Double)
-        .border_style(Style::default().fg(NEON_CYAN));
+        .border_style(Style::default().fg(NEON_GREEN));
 
-    let dialog_area = Rect {
-        x: area.width.saturating_sub(68) / 2,
-        y: area.height.saturating_sub(14) / 2,
-        width: 68.min(area.width),
-        height: 14.min(area.height),
-    };
+    let dialog_area = centered_rect(65, 60, area);
+    f.render_widget(Clear, dialog_area);
 
-    let text = vec![
+    let help_text = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("  [↑] / [k]       ", Style::default().fg(NEON_YELLOW)),
+            Span::styled("  ↑ / k            ", Style::default().fg(NEON_CYAN)),
             Span::styled(
                 "Navigate up in prefix list",
                 Style::default().fg(Color::White),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  [↓] / [j]       ", Style::default().fg(NEON_YELLOW)),
+            Span::styled("  ↓ / j            ", Style::default().fg(NEON_CYAN)),
             Span::styled(
                 "Navigate down in prefix list",
                 Style::default().fg(Color::White),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  [Space]         ", Style::default().fg(NEON_YELLOW)),
+            Span::styled("  Space            ", Style::default().fg(NEON_CYAN)),
             Span::styled(
-                "Toggle selection checkbox for current prefix",
+                "Toggle prefix selection for cleanup",
                 Style::default().fg(Color::White),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  [a]             ", Style::default().fg(NEON_YELLOW)),
+            Span::styled("  a                ", Style::default().fg(NEON_CYAN)),
             Span::styled(
-                "Select all or deselect all visible prefixes",
+                "Select/Deselect all visible prefixes",
                 Style::default().fg(Color::White),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  [i]             ", Style::default().fg(NEON_YELLOW)),
+            Span::styled("  i                ", Style::default().fg(NEON_CYAN)),
             Span::styled(
-                "Invert selection across visible prefixes",
+                "Invert current selection",
                 Style::default().fg(Color::White),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  [/]             ", Style::default().fg(NEON_YELLOW)),
+            Span::styled("  s                ", Style::default().fg(NEON_CYAN)),
             Span::styled(
-                "Filter list by AppID or game name",
+                "Cycle sort: Size → Age → AppID",
                 Style::default().fg(Color::White),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  [c]             ", Style::default().fg(NEON_YELLOW)),
+            Span::styled("  m                ", Style::default().fg(NEON_CYAN)),
             Span::styled(
-                "Clean selected prefixes (prompts confirmation)",
+                "Toggle Cyberpug mascot display",
                 Style::default().fg(Color::White),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  [?] / [h]       ", Style::default().fg(NEON_YELLOW)),
-            Span::styled("Toggle this help screen", Style::default().fg(Color::White)),
+            Span::styled("  /                ", Style::default().fg(NEON_CYAN)),
+            Span::styled(
+                "Search/filter by AppID or game title",
+                Style::default().fg(Color::White),
+            ),
         ]),
         Line::from(vec![
-            Span::styled("  [q] / [Esc]     ", Style::default().fg(NEON_YELLOW)),
+            Span::styled("  c                ", Style::default().fg(NEON_YELLOW)),
             Span::styled(
-                "Exit dialog or quit application",
+                "Trigger save vaulting & prefix cleanup",
+                Style::default().fg(Color::White),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  ? / h            ", Style::default().fg(NEON_GREEN)),
+            Span::styled("Toggle this help dialog", Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![
+            Span::styled("  q / Esc          ", Style::default().fg(NEON_PINK)),
+            Span::styled(
+                "Quit application or close modal",
                 Style::default().fg(Color::White),
             ),
         ]),
         Line::from(""),
         Line::from(Span::styled(
-            " Press [Esc] or [?] to close this help window.",
-            Style::default().fg(NEON_PINK).add_modifier(Modifier::BOLD),
+            "  Press any key to return to dashboard.",
+            Style::default().fg(Color::DarkGray),
         )),
     ];
 
-    f.render_widget(Clear, dialog_area);
-    let p = Paragraph::new(text).block(block);
+    let p = Paragraph::new(help_text).block(block);
     f.render_widget(p, dialog_area);
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }

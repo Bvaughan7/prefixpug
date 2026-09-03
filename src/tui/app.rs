@@ -13,6 +13,13 @@ pub enum AppState {
     Done,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortMode {
+    Size,
+    Age,
+    AppId,
+}
+
 pub struct App {
     pub all_orphans: Vec<OrphanedPrefix>,
     pub filtered_indices: Vec<usize>,
@@ -20,6 +27,8 @@ pub struct App {
     pub selected_appids: HashSet<String>,
     pub cursor_index: usize,
     pub state: AppState,
+    pub sort_mode: SortMode,
+    pub show_mascot: bool, // Togglable with 'm' (off by default for maximum data density)
     pub animation_frame: usize,
     pub status_message: String,
     pub backup_dir: PathBuf,
@@ -31,7 +40,10 @@ impl App {
     pub fn new(orphans: Vec<OrphanedPrefix>, backup_dir: PathBuf) -> Self {
         let mut selected_appids = HashSet::new();
         for o in &orphans {
-            selected_appids.insert(o.appid.clone());
+            // Only auto-select genuinely deletable orphans
+            if o.is_deletable() {
+                selected_appids.insert(o.appid.clone());
+            }
         }
 
         let count = orphans.len();
@@ -44,9 +56,11 @@ impl App {
             selected_appids,
             cursor_index: 0,
             state: AppState::Browsing,
+            sort_mode: SortMode::Size,
+            show_mascot: false, // Default to data-dense layout
             animation_frame: 0,
             status_message:
-                "Ready. [Space] Select | [a] All | [c] Clean | [/] Filter | [?] Help | [q] Quit"
+                "Ready. [Space] Select | [a] All | [c] Clean | [/] Filter | [m] Mascot | [?] Help | [q] Quit"
                     .to_string(),
             backup_dir,
             space_reclaimed: 0,
@@ -56,6 +70,16 @@ impl App {
 
     pub fn tick(&mut self) {
         self.animation_frame = (self.animation_frame + 1) % 120;
+    }
+
+    pub fn toggle_mascot(&mut self) {
+        self.show_mascot = !self.show_mascot;
+        self.status_message = if self.show_mascot {
+            "Mascot display enabled. Press [m] to hide."
+        } else {
+            "Data-dense layout active. Press [m] to show mascot."
+        }
+        .to_string();
     }
 
     pub fn current_orphan(&self) -> Option<&OrphanedPrefix> {
@@ -89,8 +113,42 @@ impl App {
         }
     }
 
+    pub fn toggle_sort(&mut self) {
+        self.sort_mode = match self.sort_mode {
+            SortMode::Size => SortMode::Age,
+            SortMode::Age => SortMode::AppId,
+            SortMode::AppId => SortMode::Size,
+        };
+
+        match self.sort_mode {
+            SortMode::Size => {
+                self.all_orphans
+                    .sort_by_key(|a| std::cmp::Reverse(a.total_size()));
+                self.status_message = "Sorted by size (descending)".to_string();
+            }
+            SortMode::Age => {
+                self.all_orphans
+                    .sort_by_key(|a| a.last_modified.unwrap_or(std::time::UNIX_EPOCH));
+                self.status_message = "Sorted by age (oldest first)".to_string();
+            }
+            SortMode::AppId => {
+                self.all_orphans.sort_by(|a, b| a.appid.cmp(&b.appid));
+                self.status_message = "Sorted by AppID".to_string();
+            }
+        }
+        self.apply_filter();
+    }
+
     pub fn toggle_selection(&mut self) {
         if let Some(orphan) = self.current_orphan() {
+            if !orphan.is_deletable() {
+                self.status_message = format!(
+                    "{} is protected and cannot be selected for deletion.",
+                    orphan.display_name()
+                );
+                return;
+            }
+
             let appid = orphan.appid.clone();
             if self.selected_appids.contains(&appid) {
                 self.selected_appids.remove(&appid);
@@ -101,23 +159,24 @@ impl App {
     }
 
     pub fn toggle_all(&mut self) {
-        let visible_appids: Vec<String> = self
+        let selectable_visible_appids: Vec<String> = self
             .filtered_indices
             .iter()
             .filter_map(|&idx| self.all_orphans.get(idx))
+            .filter(|o| o.is_deletable())
             .map(|o| o.appid.clone())
             .collect();
 
-        let all_selected = visible_appids
+        let all_selected = selectable_visible_appids
             .iter()
             .all(|id| self.selected_appids.contains(id));
 
         if all_selected {
-            for id in visible_appids {
+            for id in selectable_visible_appids {
                 self.selected_appids.remove(&id);
             }
         } else {
-            for id in visible_appids {
+            for id in selectable_visible_appids {
                 self.selected_appids.insert(id);
             }
         }
@@ -126,6 +185,9 @@ impl App {
     pub fn invert_selection(&mut self) {
         for &idx in &self.filtered_indices {
             if let Some(orphan) = self.all_orphans.get(idx) {
+                if !orphan.is_deletable() {
+                    continue;
+                }
                 if self.selected_appids.contains(&orphan.appid) {
                     self.selected_appids.remove(&orphan.appid);
                 } else {
@@ -160,6 +222,10 @@ impl App {
     }
 
     pub fn total_orphans_size(&self) -> u64 {
-        self.all_orphans.iter().map(|o| o.total_size()).sum()
+        self.all_orphans
+            .iter()
+            .filter(|o| o.is_deletable())
+            .map(|o| o.total_size())
+            .sum()
     }
 }

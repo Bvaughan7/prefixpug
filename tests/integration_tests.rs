@@ -1,101 +1,401 @@
+use prefixpug::backup;
+use prefixpug::scanner::{self, safe_delete_prefix_directory, validate_prefix_path_for_deletion};
+use prefixpug::vdf_parser::{
+    discover_installed_games, discover_non_steam_shortcuts, parse_library_folders,
+    validate_libraries_reachable,
+};
+use std::collections::HashMap;
 use std::fs;
+use std::path::{Path, PathBuf};
 
-// Use test helpers simulating Steam filesystem structure
-#[test]
-fn test_end_to_end_steam_scan_and_orphan_detection() {
-    let base_dir = std::env::temp_dir().join("prefixpug_integration_test");
-    let _ = fs::remove_dir_all(&base_dir);
-
-    let steamapps = base_dir.join("steamapps");
-    let compatdata = steamapps.join("compatdata");
-    let shadercache = steamapps.join("shadercache");
-
-    fs::create_dir_all(&compatdata).expect("create compatdata");
-    fs::create_dir_all(&shadercache).expect("create shadercache");
-
-    // 1. Create an INSTALLED game (AppID 100)
-    let installed_acf = steamapps.join("appmanifest_100.acf");
-    let acf_content = r#"
-"AppState"
-{
-	"appid"		"100"
-	"name"		"Cyberpunk Action Game"
-	"installdir"	"CyberpunkAction"
-	"SizeOnDisk"	"5000000"
+struct SyntheticSteamFixture {
+    root_dir: PathBuf,
+    lib_a: PathBuf,
+    lib_b: PathBuf,
+    vdf_path: PathBuf,
 }
-"#;
-    fs::write(&installed_acf, acf_content).expect("write acf");
 
-    // Prefix for installed game 100
-    let installed_pfx = compatdata.join("100");
-    fs::create_dir_all(&installed_pfx).expect("create pfx 100");
-    fs::write(installed_pfx.join("dummy.bin"), b"data").expect("write dummy");
+impl SyntheticSteamFixture {
+    fn new(test_name: &str) -> Self {
+        let root = std::env::temp_dir().join(format!("prefixpug_fixture_{}", test_name));
+        let _ = fs::remove_dir_all(&root);
 
-    // 2. Create an ORPHANED game (AppID 200) with save files
-    let orphan_pfx = compatdata.join("200");
-    let save_dir = orphan_pfx
-        .join("pfx")
-        .join("drive_c")
-        .join("users")
-        .join("steamuser")
-        .join("Saved Games");
-    fs::create_dir_all(&save_dir).expect("create save_dir");
-    fs::write(save_dir.join("profile.sav"), b"my_game_save_12345").expect("write save");
+        let lib_a = root.join("LibraryA");
+        let lib_b = root.join("LibraryB");
 
-    let orphan_shader = shadercache.join("200");
-    fs::create_dir_all(&orphan_shader).expect("create orphan shader");
-    fs::write(orphan_shader.join("dxvk.cache"), b"shader_cache_bytes").expect("write shader");
+        fs::create_dir_all(lib_a.join("steamapps").join("compatdata")).unwrap();
+        fs::create_dir_all(lib_a.join("steamapps").join("shadercache")).unwrap();
+        fs::create_dir_all(lib_b.join("steamapps").join("compatdata")).unwrap();
+        fs::create_dir_all(lib_b.join("steamapps").join("shadercache")).unwrap();
 
-    // 3. Create libraryfolders.vdf
-    let vdf_file = steamapps.join("libraryfolders.vdf");
-    let vdf_content = format!(
-        r#"
+        let vdf_path = lib_a.join("steamapps").join("libraryfolders.vdf");
+        let vdf_content = format!(
+            r#"
 "libraryfolders"
 {{
 	"0"
 	{{
 		"path"		"{}"
-		"label"		"Test Drive"
+		"label"		"Drive A"
 		"apps"
 		{{
-			"100"		"5000000"
+			"100"		"50000000"
+		}}
+	}}
+	"1"
+	{{
+		"path"		"{}"
+		"label"		"Drive B"
+		"apps"
+		{{
+			"200"		"80000000"
 		}}
 	}}
 }}
 "#,
-        base_dir.display()
+            lib_a.to_string_lossy(),
+            lib_b.to_string_lossy()
+        );
+        fs::write(&vdf_path, vdf_content).unwrap();
+
+        Self {
+            root_dir: root,
+            lib_a,
+            lib_b,
+            vdf_path,
+        }
+    }
+}
+
+impl Drop for SyntheticSteamFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root_dir);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// P0-1: Multi-Library Safety & Unreachable Library Abort
+// -----------------------------------------------------------------------------
+
+#[test]
+fn test_p0_1_multi_library_scan_and_unreachable_abort() {
+    let fixture = SyntheticSteamFixture::new("p0_1_multilib");
+
+    // Game 100 installed in Library A
+    fs::write(
+        fixture.lib_a.join("steamapps").join("appmanifest_100.acf"),
+        "\"AppState\" { \"appid\" \"100\" \"name\" \"Game In A\" }\n",
+    )
+    .unwrap();
+
+    // Game 200 installed in Library B
+    fs::write(
+        fixture.lib_b.join("steamapps").join("appmanifest_200.acf"),
+        "\"AppState\" { \"appid\" \"200\" \"name\" \"Game In B\" }\n",
+    )
+    .unwrap();
+
+    // Compatdata for 200 lives in Library B
+    let pfx_200 = fixture
+        .lib_b
+        .join("steamapps")
+        .join("compatdata")
+        .join("200");
+    fs::create_dir_all(&pfx_200).unwrap();
+
+    // Compatdata for orphan 999 lives in Library A
+    let pfx_999 = fixture
+        .lib_a
+        .join("steamapps")
+        .join("compatdata")
+        .join("999");
+    fs::create_dir_all(&pfx_999).unwrap();
+
+    // 1. Scan across both libraries
+    let libs = parse_library_folders(&fixture.vdf_path).unwrap();
+    assert_eq!(libs.len(), 2);
+    validate_libraries_reachable(&libs).unwrap();
+
+    let installed = discover_installed_games(&libs).unwrap();
+    let shortcuts = HashMap::new();
+
+    let orphans = scanner::scan_orphans(&libs, &installed, &shortcuts).unwrap();
+
+    // Assert Game 200 (in Library B) is NOT an orphan even though scanned with Library A
+    let orphan_ids: Vec<String> = orphans.iter().map(|o| o.appid.clone()).collect();
+    assert!(orphan_ids.contains(&"999".to_string()));
+    assert!(!orphan_ids.contains(&"100".to_string()));
+    assert!(!orphan_ids.contains(&"200".to_string()));
+
+    // 2. Unreachable library safety check:
+    // If Library B becomes unmounted/unreachable, scanning must abort rather than deleting 200
+    let mut unmounted_libs = libs.clone();
+    unmounted_libs[1].is_reachable = false;
+
+    let res = validate_libraries_reachable(&unmounted_libs);
+    assert!(res.is_err(), "Must abort if any library is unreachable");
+}
+
+// -----------------------------------------------------------------------------
+// P0-2: Non-Steam Shortcut Protection (shortcuts.vdf)
+// -----------------------------------------------------------------------------
+
+#[test]
+fn test_p0_2_non_steam_shortcuts_protection() {
+    let fixture = SyntheticSteamFixture::new("p0_2_shortcuts");
+
+    // Create userdata with binary shortcuts.vdf
+    let userdata_config = fixture
+        .lib_a
+        .join("userdata")
+        .join("12345678")
+        .join("config");
+    fs::create_dir_all(&userdata_config).unwrap();
+
+    // Synthetic shortcuts.vdf with AppID 3060000000 ("Battle.net")
+    let mut bytes = Vec::new();
+    bytes.push(0x00);
+    bytes.extend_from_slice(b"shortcuts\0");
+    bytes.push(0x00);
+    bytes.extend_from_slice(b"0\0");
+    bytes.push(0x02);
+    bytes.extend_from_slice(b"appid\0");
+    bytes.extend_from_slice(&3060000000u32.to_le_bytes());
+    bytes.push(0x01);
+    bytes.extend_from_slice(b"AppName\0Battle.net\0");
+    bytes.push(0x01);
+    bytes.extend_from_slice(b"Exe\0Battle.net Launcher.exe\0");
+    bytes.push(0x08);
+    bytes.push(0x08);
+
+    fs::write(userdata_config.join("shortcuts.vdf"), bytes).unwrap();
+
+    // Create compatdata prefix for 3060000000 (has no appmanifest_*.acf)
+    let pfx_shortcut = fixture
+        .lib_a
+        .join("steamapps")
+        .join("compatdata")
+        .join("3060000000");
+    fs::create_dir_all(&pfx_shortcut).unwrap();
+
+    // Create orphaned prefix 888888
+    let pfx_orphan = fixture
+        .lib_a
+        .join("steamapps")
+        .join("compatdata")
+        .join("888888");
+    fs::create_dir_all(&pfx_orphan).unwrap();
+
+    let libs = parse_library_folders(&fixture.vdf_path).unwrap();
+    let installed = discover_installed_games(&libs).unwrap();
+    let shortcuts = discover_non_steam_shortcuts(std::slice::from_ref(&fixture.lib_a)).unwrap();
+
+    let orphans = scanner::scan_orphans(&libs, &installed, &shortcuts).unwrap();
+    let orphan_ids: Vec<String> = orphans.iter().map(|o| o.appid.clone()).collect();
+
+    // 3060000000 must NOT be in the orphan list
+    assert!(!orphan_ids.contains(&"3060000000".to_string()));
+    // Genuine orphan 888888 must be detected
+    assert!(orphan_ids.contains(&"888888".to_string()));
+}
+
+// -----------------------------------------------------------------------------
+// P0-3: Steam Infrastructure AppID Protection
+// -----------------------------------------------------------------------------
+
+#[test]
+fn test_p0_3_steam_infrastructure_deny_list() {
+    let fixture = SyntheticSteamFixture::new("p0_3_infra");
+
+    // Create compatdata prefixes for Proton Experimental (1493710) and Runtime (1628350)
+    let pfx_proton = fixture
+        .lib_a
+        .join("steamapps")
+        .join("compatdata")
+        .join("1493710");
+    let pfx_runtime = fixture
+        .lib_a
+        .join("steamapps")
+        .join("compatdata")
+        .join("1628350");
+    let pfx_orphan = fixture
+        .lib_a
+        .join("steamapps")
+        .join("compatdata")
+        .join("555555");
+
+    fs::create_dir_all(&pfx_proton).unwrap();
+    fs::create_dir_all(&pfx_runtime).unwrap();
+    fs::create_dir_all(&pfx_orphan).unwrap();
+
+    let libs = parse_library_folders(&fixture.vdf_path).unwrap();
+    let installed = discover_installed_games(&libs).unwrap();
+    let shortcuts = HashMap::new();
+
+    let all_prefixes = scanner::scan_all_prefixes(&libs, &installed, &shortcuts, None).unwrap();
+
+    for p in &all_prefixes {
+        if p.appid == "1493710" || p.appid == "1628350" {
+            assert!(
+                !p.is_deletable(),
+                "Infrastructure tool {} must not be deletable",
+                p.appid
+            );
+        }
+    }
+
+    let orphans = scanner::scan_orphans(&libs, &installed, &shortcuts).unwrap();
+    let orphan_ids: Vec<String> = orphans.iter().map(|o| o.appid.clone()).collect();
+
+    assert!(!orphan_ids.contains(&"1493710".to_string()));
+    assert!(!orphan_ids.contains(&"1628350".to_string()));
+    assert!(orphan_ids.contains(&"555555".to_string()));
+}
+
+// -----------------------------------------------------------------------------
+// P0-4 & Canary: Blocklist Save Engine with Extensionless / JSON Saves Surviving
+// -----------------------------------------------------------------------------
+
+#[test]
+fn test_p0_4_canary_save_without_extension_survives_cycle() {
+    let fixture = SyntheticSteamFixture::new("p0_4_canary");
+
+    let pfx = fixture
+        .lib_a
+        .join("steamapps")
+        .join("compatdata")
+        .join("777777");
+    let saves_root = pfx
+        .join("pfx")
+        .join("drive_c")
+        .join("users")
+        .join("steamuser")
+        .join("Saved Games")
+        .join("IndieGame");
+    fs::create_dir_all(&saves_root).unwrap();
+
+    // 1. Extensionless save file
+    let extless_save = saves_root.join("SAVE_SLOT_HEAD");
+    fs::write(&extless_save, b"CANARY_SAVE_CONTENT_RAW_BINARY_12345").unwrap();
+
+    // 2. .json save file
+    let json_save = saves_root.join("profile.json");
+    fs::write(&json_save, b"{\"player\": \"canary\", \"gold\": 99999}").unwrap();
+
+    // 3. Junk: Crash dump (must be filtered out)
+    let crash_dmp = saves_root.join("crash.dmp");
+    fs::write(&crash_dmp, b"crash dump garbage").unwrap();
+
+    let mut warnings = Vec::new();
+    let saves = scanner::sniff_save_files(&pfx, &mut warnings);
+
+    let save_names: Vec<String> = saves
+        .iter()
+        .map(|s| s.path.file_name().unwrap().to_string_lossy().to_string())
+        .collect();
+
+    assert!(save_names.contains(&"SAVE_SLOT_HEAD".to_string()));
+    assert!(save_names.contains(&"profile.json".to_string()));
+    assert!(!save_names.contains(&"crash.dmp".to_string()));
+
+    // Round-trip vault & restore canary test
+    let orphan = scanner::OrphanedPrefix {
+        appid: "777777".to_string(),
+        title: Some("Canary Game".to_string()),
+        classification: prefixpug::vdf_parser::PrefixClassification::Orphaned,
+        library_path: fixture.lib_a.clone(),
+        compatdata_path: Some(pfx.clone()),
+        compatdata_usage: scanner::DiskUsage {
+            apparent_bytes: 500,
+            allocated_bytes: 4096,
+        },
+        shadercache_path: None,
+        shadercache_usage: scanner::DiskUsage::default(),
+        detected_saves: saves,
+        last_modified: None,
+        is_high_value: false,
+        high_value_reasons: vec![],
+        warnings: vec![],
+    };
+
+    let vault_dir = fixture.root_dir.join("vault");
+    let backup_dir = backup::backup_orphan_saves(&orphan, &vault_dir)
+        .unwrap()
+        .unwrap();
+
+    // Verify backup passes SHA-256 validation
+    let report = backup::verify_backup(&backup_dir.to_string_lossy(), &vault_dir).unwrap();
+    assert!(report.is_valid);
+    assert_eq!(report.files_verified, 2);
+
+    // Purge prefix
+    safe_delete_prefix_directory(&pfx).unwrap();
+    assert!(!pfx.exists());
+
+    // Restore backup
+    let restored_dir = fixture.root_dir.join("restored_saves");
+    backup::restore_backup(&backup_dir.to_string_lossy(), &vault_dir, &restored_dir).unwrap();
+
+    // CANARY ASSERTION: Extensionless save file survived and is byte-for-byte identical
+    let restored_extless = restored_dir
+        .join("pfx")
+        .join("drive_c")
+        .join("users")
+        .join("steamuser")
+        .join("Saved Games")
+        .join("IndieGame")
+        .join("SAVE_SLOT_HEAD");
+
+    assert!(
+        restored_extless.is_file(),
+        "Canary save file must exist after restore"
     );
-    fs::write(&vdf_file, vdf_content).expect("write vdf");
+    let restored_content = fs::read(&restored_extless).unwrap();
+    assert_eq!(restored_content, b"CANARY_SAVE_CONTENT_RAW_BINARY_12345");
+}
 
-    // Execute scan
-    let libraries = prefixpug::vdf_parser::parse_library_folders(&vdf_file).expect("parse libs");
-    assert_eq!(libraries.len(), 1);
+// -----------------------------------------------------------------------------
+// P0-5: Symlink and Path Traversal Safety
+// -----------------------------------------------------------------------------
 
-    let installed_games =
-        prefixpug::vdf_parser::discover_installed_games(&libraries).expect("discover installed");
-    assert!(installed_games.contains_key("100"));
-    assert!(!installed_games.contains_key("200"));
+#[test]
+fn test_p0_5_symlink_and_traversal_safety() {
+    let fixture = SyntheticSteamFixture::new("p0_5_symlinks");
 
-    let orphans =
-        prefixpug::scanner::scan_orphans(&libraries, &installed_games).expect("scan orphans");
+    let pfx = fixture
+        .lib_a
+        .join("steamapps")
+        .join("compatdata")
+        .join("333333");
+    let saves_dir = pfx
+        .join("pfx")
+        .join("drive_c")
+        .join("users")
+        .join("steamuser")
+        .join("Saved Games");
+    fs::create_dir_all(&saves_dir).unwrap();
 
-    assert_eq!(orphans.len(), 1);
-    let orphan = &orphans[0];
-    assert_eq!(orphan.appid, "200");
-    assert!(orphan.compatdata_path.is_some());
-    assert!(orphan.shadercache_path.is_some());
-    assert_eq!(orphan.detected_saves.len(), 1);
-    assert_eq!(orphan.detected_saves[0].size_bytes, 18);
+    // Create outside sentinel directory
+    let outside_sentinel = fixture.root_dir.join("outside_private_data");
+    fs::create_dir_all(&outside_sentinel).unwrap();
+    fs::write(outside_sentinel.join("secret.txt"), b"sensitive data").unwrap();
 
-    // Test save vault backup
-    let vault_dir = base_dir.join("vault");
-    let backup_res =
-        prefixpug::backup::backup_orphan_saves(orphan, &vault_dir).expect("backup saves");
-    assert!(backup_res.is_some());
-    let backup_folder = backup_res.unwrap();
-    assert!(backup_folder.join("manifest.json").exists());
-    assert!(backup_folder.join("saves.tar.gz").exists());
+    // Symlink from Saved Games pointing outside prefix
+    let link_path = saves_dir.join("symlink_to_outside");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&outside_sentinel, &link_path).unwrap();
 
-    // Clean up test sandbox
-    let _ = fs::remove_dir_all(&base_dir);
+    let mut warnings = Vec::new();
+    let saves = scanner::sniff_save_files(&pfx, &mut warnings);
+
+    // Assert outside sentinel was NOT collected
+    for s in &saves {
+        assert!(!s.path.starts_with(&outside_sentinel));
+    }
+    assert!(!warnings.is_empty(), "Must flag escaping symlink");
+
+    // Path traversal rejection checks
+    assert!(validate_prefix_path_for_deletion(Path::new("/"), "compatdata").is_err());
+    assert!(validate_prefix_path_for_deletion(&fixture.lib_a, "compatdata").is_err());
+    assert!(validate_prefix_path_for_deletion(&pfx, "compatdata").is_ok());
 }
