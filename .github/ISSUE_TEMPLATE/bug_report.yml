@@ -1,0 +1,40 @@
+name: Bug Report
+description: Report unexpected behavior, safety guard triggers, or scanning false positives.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing an issue! Please ensure you have read [SAFETY.md](https://github.com/PrefixPug/prefixpug/blob/main/SAFETY.md).
+  - type: input
+    id: version
+    attributes:
+      label: PrefixPug Version
+      description: Run `prefixpug --version`
+      placeholder: prefixpug 0.2.0
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Steam Environment Details
+      description: What Linux distro, filesystem (ext4, btrfs, zfs, etc.), and Steam installation type (Native package, Flatpak, Snap)?
+      placeholder: |
+        - Distro: Arch Linux / SteamOS 3.5
+        - Steam: Native runtime (~/.steam/root)
+        - Drives: Internal NVMe + External SSD (ext4)
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What Happened?
+      description: Describe what you observed, including command run and full terminal output.
+    validations:
+      required: true
+  - type: textarea
+    id: audit-output
+    attributes:
+      label: Output of `prefixpug audit`
+      description: If safe to share, run `prefixpug audit --json` or `prefixpug audit` and paste relevant snippet.
+      render: shell

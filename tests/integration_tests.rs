@@ -399,3 +399,80 @@ fn test_p0_5_symlink_and_traversal_safety() {
     assert!(validate_prefix_path_for_deletion(&fixture.lib_a, "compatdata").is_err());
     assert!(validate_prefix_path_for_deletion(&pfx, "compatdata").is_ok());
 }
+
+// -----------------------------------------------------------------------------
+// P1-5 & Vault: Direct Save Vaulting and Verification
+// -----------------------------------------------------------------------------
+
+#[test]
+fn test_vault_command_and_manifest_verification() {
+    let fixture = SyntheticSteamFixture::new("vault_verification");
+
+    let pfx = fixture
+        .lib_a
+        .join("steamapps")
+        .join("compatdata")
+        .join("777777");
+    let saves_dir = pfx
+        .join("pfx")
+        .join("drive_c")
+        .join("users")
+        .join("steamuser")
+        .join("Saved Games")
+        .join("GameStudio")
+        .join("Profile");
+    fs::create_dir_all(&saves_dir).unwrap();
+
+    let save1 = saves_dir.join("save_slot_01.dat");
+    let save2 = saves_dir.join("settings.ini");
+    fs::write(&save1, b"SAVE_DATA_BINARY_PAYLOAD_ABC").unwrap();
+    fs::write(&save2, b"[Audio]\nVolume=100\n").unwrap();
+
+    let mut warnings = Vec::new();
+    let detected_saves = scanner::sniff_save_files(&pfx, &mut warnings);
+    assert_eq!(detected_saves.len(), 2);
+
+    let prefix = scanner::OrphanedPrefix {
+        appid: "777777".to_string(),
+        title: Some("Mock Game".to_string()),
+        classification: prefixpug::vdf_parser::PrefixClassification::Unknown,
+        library_path: fixture.lib_a.clone(),
+        compatdata_path: Some(pfx.clone()),
+        compatdata_usage: scanner::DiskUsage::default(),
+        shadercache_path: None,
+        shadercache_usage: scanner::DiskUsage::default(),
+        last_modified: None,
+        detected_saves,
+        is_high_value: false,
+        high_value_reasons: Vec::new(),
+        warnings: Vec::new(),
+    };
+
+    let backup_vault = fixture.root_dir.join("test_vault");
+    let archive_dir = backup::backup_orphan_saves(&prefix, &backup_vault)
+        .unwrap()
+        .expect("Archive dir must be created");
+
+    let backup_id = archive_dir.file_name().and_then(|n| n.to_str()).unwrap();
+
+    // Verify backup passes SHA-256 integrity check
+    let report = backup::verify_backup(backup_id, &backup_vault).unwrap();
+    assert!(report.is_valid);
+    assert_eq!(report.files_verified, 2);
+    assert!(report.errors.is_empty());
+
+    // Tamper test: modify one byte in the archive and assert verification fails
+    let archive_tar = archive_dir.join("saves.tar.gz");
+    let mut bytes = fs::read(&archive_tar).unwrap();
+    if let Some(first_byte) = bytes.get_mut(15) {
+        *first_byte ^= 0xFF;
+    }
+    fs::write(&archive_tar, bytes).unwrap();
+
+    let tampered_report = backup::verify_backup(backup_id, &backup_vault).unwrap();
+    assert!(
+        !tampered_report.is_valid,
+        "Tampered archive must fail verification"
+    );
+    assert!(!tampered_report.errors.is_empty());
+}

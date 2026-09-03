@@ -98,6 +98,12 @@ pub enum Commands {
         yes: bool,
     },
 
+    /// Sniff and archive save files for an AppID prefix without deleting the prefix
+    Vault {
+        /// Target AppID or prefix path
+        appid: String,
+    },
+
     /// List all archived save vaults created by PrefixPug
     Backups,
 

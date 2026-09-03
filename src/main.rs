@@ -9,7 +9,7 @@ use crossterm::{
 };
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
-use std::io::{stdout, Stdout};
+use std::io::{stdin, stdout, IsTerminal, Stdout, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -92,12 +92,12 @@ fn execute_clean(
     Ok(cleaned_bytes)
 }
 
-fn run_audit_command(prefixes: &[OrphanedPrefix], json_mode: bool) -> Result<()> {
+fn run_audit_command(prefixes: &[OrphanedPrefix], json_mode: bool) -> Result<i32> {
     if json_mode {
         let json_str = serde_json::to_string_pretty(prefixes)
             .context("Failed to format prefix audit as JSON")?;
         println!("{}", json_str);
-        return Ok(());
+        return Ok(if prefixes.is_empty() { 4 } else { 0 });
     }
 
     println!("\x1b[1;36m⚡ PREFIXPUG :: Read-Only Prefix Inventory Audit\x1b[0m");
@@ -105,6 +105,11 @@ fn run_audit_command(prefixes: &[OrphanedPrefix], json_mode: bool) -> Result<()>
         "Total detected prefixes across all drives: {}\n",
         prefixes.len()
     );
+
+    if prefixes.is_empty() {
+        println!("No prefixes found matching criteria.");
+        return Ok(4);
+    }
 
     for p in prefixes {
         let title_str = p.title.as_deref().unwrap_or("unknown");
@@ -126,15 +131,15 @@ fn run_audit_command(prefixes: &[OrphanedPrefix], json_mode: bool) -> Result<()>
         );
     }
 
-    Ok(())
+    Ok(0)
 }
 
-fn run_scan_command(orphans: &[OrphanedPrefix], json_mode: bool) -> Result<()> {
+fn run_scan_command(orphans: &[OrphanedPrefix], json_mode: bool) -> Result<i32> {
     if json_mode {
         let json_str =
             serde_json::to_string_pretty(orphans).context("Failed to format orphans as JSON")?;
         println!("{}", json_str);
-        return Ok(());
+        return Ok(if orphans.is_empty() { 4 } else { 0 });
     }
 
     println!("\x1b[1;35m⚡ PREFIXPUG :: Steam/Proton Storage Scan\x1b[0m");
@@ -142,7 +147,7 @@ fn run_scan_command(orphans: &[OrphanedPrefix], json_mode: bool) -> Result<()> {
 
     if orphans.is_empty() {
         println!("✨ No orphaned prefixes detected. Your storage is squeaky clean!");
-        return Ok(());
+        return Ok(4);
     }
 
     let total_reclaimable: u64 = orphans.iter().map(|o| o.total_size()).sum();
@@ -166,7 +171,7 @@ fn run_scan_command(orphans: &[OrphanedPrefix], json_mode: bool) -> Result<()> {
         format_bytes(total_reclaimable)
     );
 
-    Ok(())
+    Ok(0)
 }
 
 fn run_clean_command(
@@ -176,7 +181,7 @@ fn run_clean_command(
     backup_root: &Path,
     purge_requested: bool,
     shaders_only: bool,
-) -> Result<()> {
+) -> Result<i32> {
     let targets: Vec<&OrphanedPrefix> = if appids_filter.is_empty() {
         orphans.iter().filter(|o| o.is_deletable()).collect()
     } else {
@@ -188,15 +193,15 @@ fn run_clean_command(
 
     if targets.is_empty() {
         println!("No orphaned prefixes matched for cleanup.");
-        return Ok(());
+        return Ok(4);
     }
 
-    // P1-4: Safe-by-default! If not --yes / --auto-clean / --purge, default to safe dry-run simulation
-    let is_dry_run = cli.dry_run || (!cli.yes && !cli.auto_clean && !purge_requested);
+    let is_explicit_dry_run = cli.dry_run;
+    let is_authorized_live = cli.yes || cli.auto_clean || purge_requested;
 
     println!("\x1b[1;35m⚡ PREFIXPUG :: Cleanup Target Summary\x1b[0m");
-    if is_dry_run {
-        println!("\x1b[1;33m[SAFE DEFAULT: Running in dry-run mode. Pass --yes or --purge to execute deletions]\x1b[0m");
+    if is_explicit_dry_run || !is_authorized_live {
+        println!("\x1b[1;33m[SAFE DEFAULT: Review targets below. Deletions require explicit confirmation]\x1b[0m");
     }
 
     let total_reclaimable: u64 = targets.iter().map(|o| o.total_size()).sum();
@@ -219,9 +224,32 @@ fn run_clean_command(
         format_bytes(total_reclaimable)
     );
 
-    if is_dry_run {
+    if is_explicit_dry_run {
         println!("Dry run simulation complete. Zero bytes were modified.");
-        return Ok(());
+        return Ok(0);
+    }
+
+    if !is_authorized_live {
+        if stdin().is_terminal() {
+            print!(
+                "Are you sure you want to delete these {} prefix(es) and reclaim {}? [y/N]: ",
+                targets.len(),
+                format_bytes(total_reclaimable)
+            );
+            stdout().flush()?;
+            let mut input = String::new();
+            stdin().read_line(&mut input)?;
+            let trimmed = input.trim().to_lowercase();
+            if trimmed != "y" && trimmed != "yes" {
+                println!("Deletion canceled by user. Zero bytes were modified.");
+                return Ok(3);
+            }
+        } else {
+            println!(
+                "Headless non-interactive deletion requires explicit confirmation. Pass --yes or --purge to proceed."
+            );
+            return Ok(3);
+        }
     }
 
     // P0-6: Enforce Steam concurrency check before destructive changes
@@ -233,7 +261,7 @@ fn run_clean_command(
         .as_ref()
         .or(targets[0].shadercache_path.as_ref())
         .map(|p| p.as_path())
-        .unwrap_or(Path::new("/"));
+        .unwrap_or_else(|| Path::new("/"));
     let free_before = scanner::get_filesystem_available_space(sample_path).unwrap_or(0);
 
     println!("Purging orphaned prefixes...");
@@ -257,17 +285,17 @@ fn run_clean_command(
         );
     }
 
-    Ok(())
+    Ok(0)
 }
 
-fn run_backups_command(backup_root: &Path, json_mode: bool) -> Result<()> {
+fn run_backups_command(backup_root: &Path, json_mode: bool) -> Result<i32> {
     let records = backup::list_backups(backup_root)?;
 
     if json_mode {
         let json_str = serde_json::to_string_pretty(&records)
             .context("Failed to format backups list as JSON")?;
         println!("{}", json_str);
-        return Ok(());
+        return Ok(if records.is_empty() { 4 } else { 0 });
     }
 
     println!("\x1b[1;35m⚡ PREFIXPUG :: Vaulted Save Backups\x1b[0m");
@@ -275,7 +303,7 @@ fn run_backups_command(backup_root: &Path, json_mode: bool) -> Result<()> {
 
     if records.is_empty() {
         println!("No save backups found in vault.");
-        return Ok(());
+        return Ok(4);
     }
 
     for r in records {
@@ -297,10 +325,10 @@ fn run_backups_command(backup_root: &Path, json_mode: bool) -> Result<()> {
 
     println!("\nTo verify a backup: prefixpug verify-backup <BACKUP_ID>");
     println!("To restore a backup: prefixpug restore <BACKUP_ID> --target <DEST>");
-    Ok(())
+    Ok(0)
 }
 
-fn run_verify_backup_command(backup_id: &str, backup_root: &Path) -> Result<()> {
+fn run_verify_backup_command(backup_id: &str, backup_root: &Path) -> Result<i32> {
     let report = backup::verify_backup(backup_id, backup_root)?;
 
     if report.is_valid {
@@ -310,7 +338,7 @@ fn run_verify_backup_command(backup_id: &str, backup_root: &Path) -> Result<()> 
             report.files_verified,
             format_bytes(report.total_bytes_verified)
         );
-        Ok(())
+        Ok(0)
     } else {
         eprintln!(
             "\x1b[1;31m✗ Backup '{}' verification FAILED:\x1b[0m",
@@ -319,11 +347,15 @@ fn run_verify_backup_command(backup_id: &str, backup_root: &Path) -> Result<()> 
         for err in report.errors {
             eprintln!("  • {}", err);
         }
-        bail!("Backup verification failed");
+        Ok(1)
     }
 }
 
-fn run_restore_command(backup_id: &str, backup_root: &Path, target: Option<PathBuf>) -> Result<()> {
+fn run_restore_command(
+    backup_id: &str,
+    backup_root: &Path,
+    target: Option<PathBuf>,
+) -> Result<i32> {
     let dest = target.unwrap_or_else(|| PathBuf::from("."));
     println!("Restoring save backup '{}' to {:?}...", backup_id, dest);
     let restored_path = backup::restore_backup(backup_id, backup_root, &dest)?;
@@ -331,10 +363,122 @@ fn run_restore_command(backup_id: &str, backup_root: &Path, target: Option<PathB
         "\x1b[1;32m✓ Successfully restored saves to {:?}\x1b[0m",
         restored_path
     );
-    Ok(())
+    Ok(0)
 }
 
-fn run_tui(mut app: App) -> Result<()> {
+fn run_vault_command(
+    appid: &str,
+    all_prefixes: &[OrphanedPrefix],
+    backup_root: &Path,
+) -> Result<i32> {
+    println!("\x1b[1;35m⚡ PREFIXPUG :: Save Vault Sniffer\x1b[0m");
+    println!("Target: {}\n", appid);
+
+    let target = all_prefixes.iter().find(|p| {
+        p.appid == appid
+            || p.compatdata_path
+                .as_ref()
+                .is_some_and(|c| c == Path::new(appid))
+    });
+
+    let prefix_to_vault = if let Some(p) = target {
+        p.clone()
+    } else {
+        let direct_path = PathBuf::from(appid);
+        if direct_path.is_dir() {
+            let mut warnings = Vec::new();
+            let detected_saves = scanner::sniff_save_files(&direct_path, &mut warnings);
+            let (is_high_value, high_value_reasons) =
+                scanner::detect_high_value_prefix(&direct_path);
+            let id = direct_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+            OrphanedPrefix {
+                appid: id,
+                title: vdf_parser::infer_title_from_compatdata(&direct_path),
+                classification: prefixpug::vdf_parser::PrefixClassification::Unknown,
+                library_path: direct_path
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| direct_path.clone()),
+                compatdata_path: Some(direct_path.clone()),
+                compatdata_usage: scanner::calculate_directory_usage(direct_path.as_path()).0,
+                shadercache_path: None,
+                shadercache_usage: scanner::DiskUsage::default(),
+                last_modified: None,
+                detected_saves,
+                is_high_value,
+                high_value_reasons,
+                warnings,
+            }
+        } else {
+            eprintln!(
+                "\x1b[1;31mError:\x1b[0m No prefix matching AppID or directory '{}' found.",
+                appid
+            );
+            return Ok(4);
+        }
+    };
+
+    if prefix_to_vault.detected_saves.is_empty() {
+        println!(
+            "No save files or documents detected in prefix {}.",
+            prefix_to_vault.appid
+        );
+        return Ok(4);
+    }
+
+    println!(
+        "The Pug's Nose snuffed out {} save file(s) ({}) in prefix {}:",
+        prefix_to_vault.detected_saves.len(),
+        format_bytes(
+            prefix_to_vault
+                .detected_saves
+                .iter()
+                .map(|s| s.size_bytes)
+                .sum()
+        ),
+        prefix_to_vault.appid
+    );
+    for s in prefix_to_vault.detected_saves.iter().take(10) {
+        println!("  • {:?}", s.path);
+    }
+    if prefix_to_vault.detected_saves.len() > 10 {
+        println!(
+            "  ... and {} more files",
+            prefix_to_vault.detected_saves.len() - 10
+        );
+    }
+
+    println!("\nArchiving and verifying vault...");
+    if let Some(archive_dir) = backup::backup_orphan_saves(&prefix_to_vault, backup_root)? {
+        let id = archive_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("?");
+        println!(
+            "\x1b[1;32m✓ Successfully vaulted saves for AppID {}!\x1b[0m",
+            prefix_to_vault.appid
+        );
+        println!("  Vault Location: {:?}", archive_dir);
+        println!("  Manifest: {:?}", archive_dir.join("manifest.json"));
+        println!("  Archive:  {:?}", archive_dir.join("saves.tar.gz"));
+        println!("\nTo verify this vault:  prefixpug verify-backup {}", id);
+        println!(
+            "To restore this vault: prefixpug restore {} --target <DEST>",
+            id
+        );
+        Ok(0)
+    } else {
+        println!("No files were archived.");
+        Ok(4)
+    }
+}
+
+fn run_tui(mut app: App) -> Result<i32> {
     enable_raw_mode().context("Failed to enable terminal raw mode")?;
     let mut stdout = stdout();
     execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
@@ -347,7 +491,7 @@ fn run_tui(mut app: App) -> Result<()> {
     execute!(terminal.backend_mut(), LeaveAlternateScreen).ok();
     terminal.show_cursor().ok();
 
-    res
+    res.map(|_| 0)
 }
 
 fn run_tui_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<()> {
@@ -473,9 +617,7 @@ fn run_tui_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
     Ok(())
 }
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
-
+fn run(cli: Cli) -> Result<i32> {
     let vdf_path = match &cli.library_vdf {
         Some(p) => p.clone(),
         None => vdf_parser::default_library_vdf_path().context(
@@ -502,7 +644,7 @@ fn main() -> Result<()> {
         Some(Commands::Completions { shell }) => {
             let mut cmd = Cli::command();
             clap_complete::generate(*shell, &mut cmd, "prefixpug", &mut std::io::stdout());
-            return Ok(());
+            return Ok(0);
         }
         _ => {}
     }
@@ -552,7 +694,7 @@ fn main() -> Result<()> {
                     .filter(|p| appids.contains(&p.appid))
                     .collect()
             };
-            run_audit_command(&filtered, cli.json)?;
+            run_audit_command(&filtered, cli.json)
         }
         Some(Commands::Scan { appids }) => {
             let filtered: Vec<OrphanedPrefix> = if appids.is_empty() {
@@ -563,21 +705,20 @@ fn main() -> Result<()> {
                     .filter(|o| appids.contains(&o.appid))
                     .collect()
             };
-            run_scan_command(&filtered, cli.json)?;
+            run_scan_command(&filtered, cli.json)
         }
-        Some(Commands::Clean { appids, purge }) => {
-            run_clean_command(
-                &cli,
-                &orphans,
-                appids,
-                &backup_dir,
-                *purge,
-                cli.shaders_only,
-            )?;
-        }
+        Some(Commands::Clean { appids, purge }) => run_clean_command(
+            &cli,
+            &orphans,
+            appids,
+            &backup_dir,
+            *purge,
+            cli.shaders_only,
+        ),
         Some(Commands::Shaders { appids, yes }) => {
-            run_clean_command(&cli, &orphans, appids, &backup_dir, *yes, true)?;
+            run_clean_command(&cli, &orphans, appids, &backup_dir, *yes, true)
         }
+        Some(Commands::Vault { appid }) => run_vault_command(appid, &all_prefixes, &backup_dir),
         Some(Commands::Backups)
         | Some(Commands::VerifyBackup { .. })
         | Some(Commands::Restore { .. })
@@ -585,16 +726,34 @@ fn main() -> Result<()> {
         None => {
             if cli.no_tui || cli.dry_run || cli.auto_clean || cli.json || cli.shaders_only {
                 if cli.auto_clean {
-                    run_clean_command(&cli, &orphans, &[], &backup_dir, cli.yes, cli.shaders_only)?;
+                    run_clean_command(&cli, &orphans, &[], &backup_dir, cli.yes, cli.shaders_only)
                 } else {
-                    run_scan_command(&orphans, cli.json)?;
+                    run_scan_command(&orphans, cli.json)
                 }
             } else {
                 let app = App::new(orphans, backup_dir);
-                run_tui(app)?;
+                run_tui(app)
             }
         }
     }
+}
 
-    Ok(())
+fn main() -> std::process::ExitCode {
+    let cli = Cli::parse();
+    match run(cli) {
+        Ok(code) => std::process::ExitCode::from(code as u8),
+        Err(err) => {
+            let err_msg = format!("{:#}", err);
+            eprintln!("\x1b[1;31mError:\x1b[0m {}", err_msg);
+            if err_msg.contains("Safety violation")
+                || err_msg.contains("Steam is currently running")
+                || err_msg.contains("Unmounted library")
+                || err_msg.contains("escapes outside")
+            {
+                std::process::ExitCode::from(2)
+            } else {
+                std::process::ExitCode::from(1)
+            }
+        }
+    }
 }

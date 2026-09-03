@@ -1,0 +1,138 @@
+.TH PREFIXPUG 1 "September 2026" "prefixpug 0.2.0" "User Commands"
+.SH NAME
+prefixpug \- safe, high-performance Steam/Proton compatdata and shadercache sniffer
+.SH SYNOPSIS
+.B prefixpug
+[\fIOPTIONS\fR]
+.br
+.B prefixpug
+[\fICOMMAND\fR]
+.SH DESCRIPTION
+.B prefixpug
+is a terminal utility designed to safely reclaim storage space on Linux systems by identifying and cleaning orphaned Steam/Proton compatibility data (\fBcompatdata\fR) and shader caches (\fBshadercache\fR).
+.PP
+Unlike generic cleanup scripts, \fBprefixpug\fR implements an uncompromising "data-loss defense" architecture:
+.IP \(bu 2
+\fBMulti-Library Mount Guard:\fR Verifies all mounted library folders before running. If any drive configured in Steam's \fBlibraryfolders.vdf\fR is disconnected or missing, prefixpug immediately halts to prevent misclassifying games on unmounted drives as orphans.
+.IP \(bu 2
+\fBNon-Steam Shortcut Parser:\fR Ingests Steam's binary \fBshortcuts.vdf\fR across all userdata accounts, protecting Non-Steam games (Battle.net, Heroic, emulation prefixes) from accidental deletion.
+.IP \(bu 2
+\fBInfrastructure Deny-List:\fR Permanently locks critical Proton runtime environments (Steam Linux Runtime, Proton Experimental, Proton Hotfix, Steamworks Common Redistributables) from ever being selected or purged.
+.IP \(bu 2
+\fBThe Pug's Nose (Save Vaulting):\fR Automatically sniffs out local save games, configurations, and user documents inside the prefix prior to any removal. Saves are archived to compressed, SHA-256-verified tarballs in \fB~/.local/share/prefixpug/backups/\fR with an uncompressed \fBmanifest.json\fR and synced to disk via \fBfsync\fR before any deletion command is issued.
+.IP \(bu 2
+\fBHonest Allocation Sizing:\fR Queries filesystem blocks (\fBst_blocks * 512\fR) rather than apparent file size, accurately accounting for Proton's sparse files and symlinks.
+.IP \(bu 2
+\fBSymlink & Path Traversal Jail:\fR Never follows symlinks outside designated prefix directories. Rejects deletions if paths resolve outside \fBcompatdata/\fR or \fBshadercache/\fR.
+.SH COMMANDS
+.TP
+\fB(default)\fR
+Launches the interactive Synthwave Ratatui TUI dashboard. Displays disk allocation, age, detected save files, and high-value indicators (e.g., SKSE/F4SE mod loaders).
+.TP
+\fBscan\fR [\fI--older-than DAYS\fR] [\fI--json\fR]
+Performs a read-only scan across all configured Steam libraries and prints discovered orphaned prefixes to stdout.
+.TP
+\fBaudit\fR
+Runs a comprehensive safety diagnostic check against the local Steam environment, inspecting library mounts, Steam process lock states, active Non-Steam shortcuts, and backup directory permissions.
+.TP
+\fBclean\fR [\fI--dry-run\fR] [\fI--yes\fR] [\fI--purge\fR] [\fI--older-than DAYS\fR] [\fI--shaders-only\fR] [\fI--no-backup\fR]
+Cleans orphaned compatdata and shader directories. By default, runs in safe \fB--dry-run\fR simulation mode unless \fB--yes\fR or \fB--purge\fR is explicitly specified.
+.TP
+\fBshaders\fR [\fI--yes\fR]
+Zero-risk shortcut command to clean only orphaned shader caches, leaving Proton prefixes intact.
+.TP
+\fBvault\fR \fI<APPID>\fR
+Sniffs and archives the save files for a specific AppID prefix into the backup directory without modifying or deleting the prefix.
+.TP
+\fBverify-backup\fR \fI<APPID>\fR
+Verifies the integrity of existing backup archives for the given AppID using SHA-256 checksums and tarball structure inspection.
+.SH OPTIONS
+.TP
+\fB-p\fR, \fB--path\fR \fI<PATH>\fR
+Specify an alternative Steam library path instead of auto-discovering via \fB~/.steam/root\fR.
+.TP
+\fB-b\fR, \fB--backup-dir\fR \fI<DIR>\fR
+Specify a custom destination directory for save file backup archives (default: \fB~/.local/share/prefixpug/backups/\fR).
+.TP
+\fB-o\fR, \fB--older-than\fR \fI<DAYS>\fR
+Filter orphans by age in days based on newest modified timestamp in the prefix.
+.TP
+\fB-d\fR, \fB--dry-run\fR
+Simulate actions without deleting files or writing archives (default behavior for \fBclean\fR).
+.TP
+\fB-y\fR, \fB--yes\fR
+Execute deletion without prompting for confirmation.
+.TP
+\fB--purge\fR
+Synonym for \fB--yes\fR to execute live deletion.
+.TP
+\fB--shaders-only\fR
+Only clean orphaned shader caches, leaving Proton prefixes intact.
+.TP
+\fB--no-backup\fR
+Skip save file sniffing and backup archiving before deletion. \fBCAUTION: Not recommended.\fR
+.TP
+\fB--force\fR
+Override safety guards (such as active Steam process detection). \fBUSE WITH CAUTION.\fR
+.TP
+\fB-j\fR, \fB--json\fR
+Output scan and audit results in machine-readable JSON format.
+.TP
+\fB-h\fR, \fB--help\fR
+Print help information.
+.TP
+\fB-V\fR, \fB--version\fR
+Print version information.
+.SH TUI KEYBINDINGS
+.TP
+\fBUp / k\fR, \fBDown / j\fR
+Navigate up/down in the orphan list.
+.TP
+\fBSpace\fR
+Toggle selection of the focused item.
+.TP
+\fBa\fR
+Select / deselect all items.
+.TP
+\fBs\fR
+Cycle sort order (Size descending, Age oldest first, AppID ascending).
+.TP
+\fBm\fR
+Toggle cyberpug ASCII mascot display.
+.TP
+\fBd\fR
+Trigger cleanup of selected items (prompts with verification modal).
+.TP
+\fBq / Esc\fR
+Exit application.
+.SH EXIT STATUS
+.TP
+\fB0\fR
+Success / clean execution.
+.TP
+\fB1\fR
+General execution error.
+.TP
+\fB2\fR
+Unsafe state detected (unmounted drive, running Steam process without \fB--force\fR, escaping symlink).
+.TP
+\fB3\fR
+User canceled or aborted prompt confirmation.
+.TP
+\fB4\fR
+No matching orphaned prefixes found.
+.SH FILES
+.TP
+\fI~/.steam/root/steamapps/libraryfolders.vdf\fR
+Steam's library index mapping all mounted storage drives.
+.TP
+\fI~/.steam/root/userdata/<account_id>/config/shortcuts.vdf\fR
+Steam's binary index of user-added Non-Steam shortcuts.
+.TP
+\fI~/.local/share/prefixpug/backups/\fR
+Default directory where save file archives and manifests are stored.
+.SH AUTHORS
+PrefixPug Developers (GitHub: @PrefixPug).
+.SH SEE ALSO
+.BR steam (6),
+.BR protontricks (1)

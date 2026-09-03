@@ -30,6 +30,11 @@ if [ -d "${HOME}/.config/fish/completions" ]; then
     "${INSTALL_DIR}/prefixpug" completions fish > "${HOME}/.config/fish/completions/prefixpug.fish"
 fi
 
+# Man page
+MANDIR="${HOME}/.local/share/man/man1"
+mkdir -p "${MANDIR}"
+cp man/prefixpug.1 "${MANDIR}/prefixpug.1"
+
 echo -e "\033[1;32m✓ PrefixPug successfully installed to ${INSTALL_DIR}/prefixpug\033[0m"
 
 if ! echo "${PATH}" | grep -q "${HOME}/.local/bin"; then

@@ -1,0 +1,23 @@
+name: Feature Request
+description: Suggest an enhancement, new save location heuristic, or safety guard for PrefixPug.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: feature-description
+    attributes:
+      label: Feature Description
+      description: Clear and concise description of the feature or heuristic you would like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: safety-considerations
+    attributes:
+      label: Safety & False-Positive Analysis
+      description: How does this proposal adhere to PrefixPug's Prime Directive (Safety above all)? What edge cases could result in false positives or data loss?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions Considered
+      description: What other approaches or workarounds exist?

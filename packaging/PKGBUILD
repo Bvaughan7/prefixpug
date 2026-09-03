@@ -1,0 +1,44 @@
+# Maintainer: PrefixPug Developers <https://github.com/PrefixPug/prefixpug>
+pkgname=prefixpug
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="Safe, high-performance Steam/Proton compatdata and shadercache sniffer"
+arch=('x86_64')
+url="https://github.com/PrefixPug/prefixpug"
+license=('MIT')
+depends=('gcc-libs')
+makedepends=('cargo')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+prepare() {
+    cd "$pkgname-$pkgver"
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+    cd "$pkgname-$pkgver"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --frozen --release --all-targets
+}
+
+check() {
+    cd "$pkgname-$pkgver"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo test --frozen --all-targets
+}
+
+package() {
+    cd "$pkgname-$pkgver"
+    install -Dm755 target/release/prefixpug "$pkgdir/usr/bin/prefixpug"
+    install -Dm644 man/prefixpug.1 "$pkgdir/usr/share/man/man1/prefixpug.1"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 SAFETY.md "$pkgdir/usr/share/doc/$pkgname/SAFETY.md"
+
+    # Shell completions
+    target/release/prefixpug completions bash | install -Dm644 /dev/stdin "$pkgdir/usr/share/bash-completion/completions/prefixpug"
+    target/release/prefixpug completions zsh | install -Dm644 /dev/stdin "$pkgdir/usr/share/zsh/site-functions/_prefixpug"
+    target/release/prefixpug completions fish | install -Dm644 /dev/stdin "$pkgdir/usr/share/fish/vendor_completions.d/prefixpug.fish"
+}
