@@ -26,7 +26,9 @@ pub fn default_library_vdf_path() -> Result<PathBuf> {
             home.join(".steam/steam/steamapps/libraryfolders.vdf"),
             home.join(".local/share/Steam/steamapps/libraryfolders.vdf"),
             home.join(".var/app/com.valvesoftware.Steam/.steam/root/steamapps/libraryfolders.vdf"),
-            home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/libraryfolders.vdf"),
+            home.join(
+                ".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/libraryfolders.vdf",
+            ),
         ];
 
         for candidate in &candidates {
@@ -53,13 +55,17 @@ pub fn parse_library_folders(vdf_path: &Path) -> Result<Vec<LibraryFolder>> {
 
     let mut folders = Vec::new();
 
-    for (_key, values) in root_obj.iter() {
+    for values in root_obj.values() {
         for val in values {
             if let Value::Obj(folder_obj) = val {
-                let path_str = folder_obj.get("path").and_then(|v| v.first()).and_then(|v| match v {
-                    Value::Str(s) => Some(s.as_ref()),
-                    _ => None,
-                });
+                let path_str =
+                    folder_obj
+                        .get("path")
+                        .and_then(|v| v.first())
+                        .and_then(|v| match v {
+                            Value::Str(s) => Some(s.as_ref()),
+                            _ => None,
+                        });
 
                 if let Some(path) = path_str {
                     let label = folder_obj
@@ -75,7 +81,7 @@ pub fn parse_library_folders(vdf_path: &Path) -> Result<Vec<LibraryFolder>> {
                     if let Some(apps_vals) = folder_obj.get("apps") {
                         for app_val in apps_vals {
                             if let Value::Obj(apps_obj) = app_val {
-                                for (app_id, _) in apps_obj.iter() {
+                                for app_id in apps_obj.keys() {
                                     apps.push(app_id.to_string());
                                 }
                             }
@@ -108,10 +114,13 @@ pub fn parse_appmanifest(acf_path: &Path, library_path: &Path) -> Result<Install
     };
 
     let get_str = |key: &str| -> Option<String> {
-        root_obj.get(key).and_then(|v| v.first()).and_then(|v| match v {
-            Value::Str(s) => Some(s.to_string()),
-            _ => None,
-        })
+        root_obj
+            .get(key)
+            .and_then(|v| v.first())
+            .and_then(|v| match v {
+                Value::Str(s) => Some(s.to_string()),
+                _ => None,
+            })
     };
 
     let appid = match get_str("appid") {
@@ -134,7 +143,9 @@ pub fn parse_appmanifest(acf_path: &Path, library_path: &Path) -> Result<Install
     })
 }
 
-pub fn discover_installed_games(libraries: &[LibraryFolder]) -> Result<HashMap<String, InstalledGame>> {
+pub fn discover_installed_games(
+    libraries: &[LibraryFolder],
+) -> Result<HashMap<String, InstalledGame>> {
     let mut games = HashMap::new();
 
     for lib in libraries {
@@ -168,6 +179,56 @@ pub fn discover_installed_games(libraries: &[LibraryFolder]) -> Result<HashMap<S
     Ok(games)
 }
 
+/// Attempts to infer a human-readable title for an uninstalled prefix from its Wine registry or files
+pub fn infer_title_from_compatdata(compatdata_dir: &Path) -> Option<String> {
+    let user_reg = compatdata_dir.join("pfx").join("user.reg");
+    if user_reg.is_file() {
+        if let Ok(content) = std::fs::read_to_string(&user_reg) {
+            for line in content.lines() {
+                // Look for [Software\\Publisher\\GameName] or similar registry paths
+                if line.starts_with("[Software\\")
+                    && !line.contains("Wine")
+                    && !line.contains("Microsoft")
+                {
+                    let trimmed = line.trim_matches(|c| c == '[' || c == ']');
+                    let parts: Vec<&str> = trimmed.split('\\').collect();
+                    if parts.len() >= 3 {
+                        let candidate = parts[2].trim();
+                        if !candidate.is_empty() && candidate != "Classes" {
+                            return Some(candidate.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Secondary heuristic: check for game directories under Saved Games or My Games
+    let my_games = compatdata_dir
+        .join("pfx")
+        .join("drive_c")
+        .join("users")
+        .join("steamuser")
+        .join("Documents")
+        .join("My Games");
+
+    if my_games.is_dir() {
+        if let Ok(entries) = std::fs::read_dir(&my_games) {
+            for entry in entries.flatten() {
+                if let Ok(ft) = entry.file_type() {
+                    if ft.is_dir() {
+                        if let Some(name) = entry.file_name().to_str() {
+                            return Some(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,5 +257,18 @@ mod tests {
             _ => panic!("Expected Obj"),
         };
         assert!(root_obj.contains_key("0"));
+    }
+
+    #[test]
+    fn test_infer_title_from_mock_user_reg() {
+        let temp_dir = std::env::temp_dir().join("prefixpug_test_infer");
+        let pfx_dir = temp_dir.join("pfx");
+        let _ = std::fs::create_dir_all(&pfx_dir);
+        let reg_content = "[Software\\Bethesda\\SkyrimSE]\n\"Installed\"=dword:00000001\n";
+        let _ = std::fs::write(pfx_dir.join("user.reg"), reg_content);
+
+        let inferred = infer_title_from_compatdata(&temp_dir);
+        assert_eq!(inferred.as_deref(), Some("SkyrimSE"));
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

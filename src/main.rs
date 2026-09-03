@@ -1,8 +1,4 @@
-pub mod backup;
-pub mod cli;
-pub mod scanner;
-pub mod tui;
-pub mod vdf_parser;
+use prefixpug::{backup, cli, scanner, tui, vdf_parser};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -14,10 +10,10 @@ use crossterm::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::{self, stdout, Stdout, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::cli::Cli;
+use crate::cli::{Cli, Commands};
 use crate::scanner::OrphanedPrefix;
 use crate::tui::app::{App, AppState};
 
@@ -37,17 +33,17 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
-fn execute_clean(
-    orphan: &OrphanedPrefix,
-    backup_root: &Path,
-    skip_backup: bool,
-) -> Result<u64> {
+fn execute_clean(orphan: &OrphanedPrefix, backup_root: &Path, skip_backup: bool) -> Result<u64> {
     let mut cleaned_bytes = 0;
 
     // 1. Dig up and bury save files first (The Pug's Nose)
     if !skip_backup && !orphan.detected_saves.is_empty() {
         if let Some(archive_dir) = backup::backup_orphan_saves(orphan, backup_root)? {
-            println!("  [Pug Vault] Buried {} save files -> {:?}", orphan.detected_saves.len(), archive_dir);
+            println!(
+                "  [Pug Vault] Buried {} save files -> {:?}",
+                orphan.detected_saves.len(),
+                archive_dir
+            );
         }
     }
 
@@ -72,9 +68,16 @@ fn execute_clean(
     Ok(cleaned_bytes)
 }
 
-fn run_cli_mode(cli: &Cli, orphans: &[OrphanedPrefix], backup_dir: &Path) -> Result<()> {
-    println!("\x1b[1;35m⚡ PREFIXPUG :: Steam/Proton Storage Reclamation\x1b[0m");
-    println!("Found {} orphaned prefix candidates:\n", orphans.len());
+fn run_scan_command(orphans: &[OrphanedPrefix], json_mode: bool) -> Result<()> {
+    if json_mode {
+        let json_str =
+            serde_json::to_string_pretty(orphans).context("Failed to format orphans as JSON")?;
+        println!("{}", json_str);
+        return Ok(());
+    }
+
+    println!("\x1b[1;35m⚡ PREFIXPUG :: Steam/Proton Storage Scan\x1b[0m");
+    println!("Found {} orphaned prefix candidate(s):\n", orphans.len());
 
     if orphans.is_empty() {
         println!("✨ No orphaned prefixes detected. Your storage is squeaky clean!");
@@ -84,9 +87,11 @@ fn run_cli_mode(cli: &Cli, orphans: &[OrphanedPrefix], backup_dir: &Path) -> Res
     let total_reclaimable: u64 = orphans.iter().map(|o| o.total_size()).sum();
 
     for o in orphans {
+        let title_str = o.title.as_deref().unwrap_or("unknown");
         println!(
-            " • AppID: {:<8} | Size: {:>10} | Saves: {} | Compat: {:?} | Shaders: {:?}",
+            " • AppID: {:<8} | Title: {:<20} | Size: {:>10} | Saves: {:>2} | Compat: {:?} | Shaders: {:?}",
             o.appid,
+            title_str,
             format_bytes(o.total_size()),
             o.detected_saves.len(),
             o.compatdata_path.as_deref().map(|p| p.display().to_string()).unwrap_or_else(|| "-".into()),
@@ -94,16 +99,53 @@ fn run_cli_mode(cli: &Cli, orphans: &[OrphanedPrefix], backup_dir: &Path) -> Res
         );
     }
 
-    println!("\nTotal reclaimable space: {}", format_bytes(total_reclaimable));
+    println!(
+        "\nTotal reclaimable space: {}",
+        format_bytes(total_reclaimable)
+    );
+    Ok(())
+}
 
-    if cli.dry_run {
-        println!("\n[Dry Run] No files modified or removed.");
+fn run_clean_command(
+    cli: &Cli,
+    orphans: &[OrphanedPrefix],
+    target_appids: &[String],
+    backup_dir: &Path,
+) -> Result<()> {
+    let filtered: Vec<&OrphanedPrefix> = if target_appids.is_empty() {
+        orphans.iter().collect()
+    } else {
+        orphans
+            .iter()
+            .filter(|o| target_appids.contains(&o.appid))
+            .collect()
+    };
+
+    if filtered.is_empty() {
+        println!("✨ No matching orphaned prefixes found to clean.");
         return Ok(());
     }
 
-    // Safety rule: prompt for user confirmation before deletion unless --auto-clean was passed
+    let total_reclaimable: u64 = filtered.iter().map(|o| o.total_size()).sum();
+
+    println!("\x1b[1;35m⚡ PREFIXPUG :: Cleanup Target Summary\x1b[0m");
+    for o in &filtered {
+        println!(
+            " • {} | Reclaimable: {}",
+            o.display_name(),
+            format_bytes(o.total_size())
+        );
+    }
+    println!("Total to reclaim: {}", format_bytes(total_reclaimable));
+
+    if cli.dry_run {
+        println!("\n[Dry Run] Simulation complete. No files modified or deleted.");
+        return Ok(());
+    }
+
+    // Always prompt for user confirmation before deletion unless auto_clean is true
     if !cli.auto_clean {
-        print!("\nAre you sure you want to bury saves and delete these prefixes? (y/N): ");
+        print!("\nAre you sure you want to bury saves and purge these prefixes? (y/N): ");
         stdout().flush()?;
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
@@ -115,7 +157,7 @@ fn run_cli_mode(cli: &Cli, orphans: &[OrphanedPrefix], backup_dir: &Path) -> Res
 
     println!("\nPurging orphaned prefixes...");
     let mut total_cleaned = 0;
-    for orphan in orphans {
+    for orphan in &filtered {
         match execute_clean(orphan, backup_dir, cli.skip_backup) {
             Ok(bytes) => {
                 total_cleaned += bytes;
@@ -127,7 +169,62 @@ fn run_cli_mode(cli: &Cli, orphans: &[OrphanedPrefix], backup_dir: &Path) -> Res
         }
     }
 
-    println!("\n🎉 Reclamation complete! Cleaned {}.", format_bytes(total_cleaned));
+    println!(
+        "\n🎉 Reclamation complete! Recovered {}.",
+        format_bytes(total_cleaned)
+    );
+    Ok(())
+}
+
+fn run_backups_command(backup_dir: &Path, json_mode: bool) -> Result<()> {
+    let records = backup::list_backups(backup_dir)?;
+
+    if json_mode {
+        let json_str = serde_json::to_string_pretty(&records)?;
+        println!("{}", json_str);
+        return Ok(());
+    }
+
+    println!("\x1b[1;35m⚡ PREFIXPUG :: Vaulted Save Backups\x1b[0m");
+    println!("Backup root: {:?}\n", backup_dir);
+
+    if records.is_empty() {
+        println!("No save backups found in the vault.");
+        return Ok(());
+    }
+
+    for record in &records {
+        let m = &record.manifest;
+        let title = m.title.as_deref().unwrap_or("Unknown Game");
+        let dir_name = record
+            .directory
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("?");
+        println!(
+            " • Backup ID: {:<20} | AppID: {:<8} | Title: {:<20} | Files: {:>2} | Size: {:>10}",
+            dir_name,
+            m.appid,
+            title,
+            m.files.len(),
+            format_bytes(m.total_save_size)
+        );
+    }
+
+    println!("\nTo restore a backup run: prefixpug restore <BACKUP_ID> --target <DEST>");
+    Ok(())
+}
+
+fn run_restore_command(backup_id: &str, backup_root: &Path, target: Option<PathBuf>) -> Result<()> {
+    let dest = match target {
+        Some(d) => d,
+        None => std::env::current_dir().context("Failed to get current working directory")?,
+    };
+
+    println!("Restoring save backup '{}' to {:?}...", backup_id, dest);
+
+    let restored_path = backup::restore_backup(backup_id, backup_root, &dest)?;
+    println!("✓ Successfully restored saves to {:?}", restored_path);
     Ok(())
 }
 
@@ -140,7 +237,6 @@ fn run_tui(mut app: App) -> Result<()> {
 
     let res = run_tui_event_loop(&mut terminal, &mut app);
 
-    // Restore terminal state
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
@@ -166,7 +262,7 @@ fn run_tui_event_loop(
                 if key.kind == KeyEventKind::Press {
                     match app.state {
                         AppState::Browsing => match key.code {
-                            KeyCode::Char('q') | KeyCode::Esc => {
+                            KeyCode::Char('q') => {
                                 app.should_quit = true;
                             }
                             KeyCode::Up | KeyCode::Char('k') => {
@@ -181,12 +277,52 @@ fn run_tui_event_loop(
                             KeyCode::Char('a') => {
                                 app.toggle_all();
                             }
+                            KeyCode::Char('i') => {
+                                app.invert_selection();
+                            }
+                            KeyCode::Char('/') => {
+                                app.state = AppState::Filtering;
+                                app.filter_query.clear();
+                                app.status_message =
+                                    "Type filter query... Press [Enter] or [Esc] to return"
+                                        .to_string();
+                            }
+                            KeyCode::Char('?') | KeyCode::Char('h') => {
+                                app.state = AppState::ShowingHelp;
+                            }
                             KeyCode::Char('c') => {
                                 if !app.selected_appids.is_empty() {
                                     app.state = AppState::ConfirmingDeletion;
                                 } else {
-                                    app.status_message = "No prefixes selected to clean.".to_string();
+                                    app.status_message =
+                                        "No prefixes selected to clean.".to_string();
                                 }
+                            }
+                            _ => {}
+                        },
+                        AppState::Filtering => match key.code {
+                            KeyCode::Enter | KeyCode::Esc => {
+                                app.state = AppState::Browsing;
+                                app.status_message =
+                                    format!("Filter applied: '{}'", app.filter_query);
+                            }
+                            KeyCode::Backspace => {
+                                app.filter_query.pop();
+                                app.apply_filter();
+                            }
+                            KeyCode::Char(c) => {
+                                app.filter_query.push(c);
+                                app.apply_filter();
+                            }
+                            _ => {}
+                        },
+                        AppState::ShowingHelp => match key.code {
+                            KeyCode::Esc
+                            | KeyCode::Char('?')
+                            | KeyCode::Char('h')
+                            | KeyCode::Enter
+                            | KeyCode::Char('q') => {
+                                app.state = AppState::Browsing;
                             }
                             _ => {}
                         },
@@ -194,7 +330,7 @@ fn run_tui_event_loop(
                             KeyCode::Char('y') | KeyCode::Char('Y') => {
                                 app.state = AppState::Cleaning;
                                 let to_clean: Vec<OrphanedPrefix> = app
-                                    .orphans
+                                    .all_orphans
                                     .iter()
                                     .filter(|o| app.selected_appids.contains(&o.appid))
                                     .cloned()
@@ -202,7 +338,8 @@ fn run_tui_event_loop(
 
                                 let mut cleaned = 0;
                                 for orphan in &to_clean {
-                                    if let Ok(bytes) = execute_clean(orphan, &app.backup_dir, false) {
+                                    if let Ok(bytes) = execute_clean(orphan, &app.backup_dir, false)
+                                    {
                                         cleaned += bytes;
                                     }
                                 }
@@ -211,10 +348,10 @@ fn run_tui_event_loop(
                                     "Successfully buried saves and reclaimed {}!",
                                     format_bytes(cleaned)
                                 );
-                                // Remove cleaned items from list
-                                app.orphans.retain(|o| !app.selected_appids.contains(&o.appid));
+                                app.all_orphans
+                                    .retain(|o| !app.selected_appids.contains(&o.appid));
                                 app.selected_appids.clear();
-                                app.cursor_index = 0;
+                                app.apply_filter();
                                 app.state = AppState::Done;
                             }
                             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
@@ -224,7 +361,10 @@ fn run_tui_event_loop(
                             _ => {}
                         },
                         AppState::Done => match key.code {
-                            KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter | KeyCode::Char(' ') => {
+                            KeyCode::Char('q')
+                            | KeyCode::Esc
+                            | KeyCode::Enter
+                            | KeyCode::Char(' ') => {
                                 app.state = AppState::Browsing;
                             }
                             _ => {}
@@ -246,8 +386,9 @@ fn main() -> Result<()> {
 
     let vdf_path = match &cli.library_vdf {
         Some(p) => p.clone(),
-        None => vdf_parser::default_library_vdf_path()
-            .context("Failed to locate Steam libraryfolders.vdf. Specify path using --library-vdf <PATH>")?,
+        None => vdf_parser::default_library_vdf_path().context(
+            "Failed to locate Steam libraryfolders.vdf. Specify path using --library-vdf <PATH>",
+        )?,
     };
 
     let backup_dir = match &cli.backup_dir {
@@ -255,17 +396,51 @@ fn main() -> Result<()> {
         None => backup::default_backup_root()?,
     };
 
+    // Subcommand dispatch
+    match &cli.command {
+        Some(Commands::Backups) => {
+            return run_backups_command(&backup_dir, cli.json);
+        }
+        Some(Commands::Restore { backup_id, target }) => {
+            return run_restore_command(backup_id, &backup_dir, target.clone());
+        }
+        _ => {}
+    }
+
     let library_folders = vdf_parser::parse_library_folders(&vdf_path)
         .with_context(|| format!("Failed to parse library folders from {:?}", vdf_path))?;
 
     let installed_games = vdf_parser::discover_installed_games(&library_folders)?;
     let orphans = scanner::scan_orphans(&library_folders, &installed_games)?;
 
-    if cli.no_tui || cli.dry_run || cli.auto_clean {
-        run_cli_mode(&cli, &orphans, &backup_dir)?;
-    } else {
-        let app = App::new(orphans, backup_dir);
-        run_tui(app)?;
+    match &cli.command {
+        Some(Commands::Scan { appids }) => {
+            let filtered: Vec<OrphanedPrefix> = if appids.is_empty() {
+                orphans
+            } else {
+                orphans
+                    .into_iter()
+                    .filter(|o| appids.contains(&o.appid))
+                    .collect()
+            };
+            run_scan_command(&filtered, cli.json)?;
+        }
+        Some(Commands::Clean { appids }) => {
+            run_clean_command(&cli, &orphans, appids, &backup_dir)?;
+        }
+        Some(Commands::Backups) | Some(Commands::Restore { .. }) => unreachable!(),
+        None => {
+            if cli.no_tui || cli.dry_run || cli.auto_clean || cli.json {
+                if cli.auto_clean {
+                    run_clean_command(&cli, &orphans, &[], &backup_dir)?;
+                } else {
+                    run_scan_command(&orphans, cli.json)?;
+                }
+            } else {
+                let app = App::new(orphans, backup_dir);
+                run_tui(app)?;
+            }
+        }
     }
 
     Ok(())
