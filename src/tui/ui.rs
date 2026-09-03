@@ -178,7 +178,7 @@ fn render_orphan_list(f: &mut Frame, app: &App, area: Rect) {
 
             let saves_span = if !orphan.detected_saves.is_empty() {
                 Span::styled(
-                    format!(" 🦴 {} saves", orphan.detected_saves.len()),
+                    format!(" ★ {} saves", orphan.detected_saves.len()),
                     Style::default().fg(NEON_PINK),
                 )
             } else {
@@ -461,7 +461,7 @@ fn render_confirm_dialog(f: &mut Frame, app: &App, area: Rect) {
         )),
         Line::from(""),
         Line::from(Span::styled(
-            " 🐾 The Pug's Nose will bury (backup) all saves to:",
+            " ⚡ The Pug's Nose will bury (backup) all saves to:",
             Style::default().fg(NEON_CYAN),
         )),
         Line::from(Span::styled(
