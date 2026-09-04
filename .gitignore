@@ -1,1 +1,24 @@
+# Rust build artifacts
 /target
+dist/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# Editor and IDE configurations
+*.swp
+*~
+.idea/
+.vscode/
+
+# Local environment & secrets
+*.env
+.env
+*.log
+
+# AI agent & developer scratch files
+GEMINI.md
+*GEMINI*.md
+.gemini/
+scratch/

@@ -2,11 +2,11 @@
 name = "prefixpug"
 version = "0.2.1"
 edition = "2021"
-authors = ["PrefixPug Developers <https://github.com/PrefixPug/prefixpug>"]
+authors = ["Bryan Vaughan <bryanvaughan07@gmail.com>"]
 description = "Safely sniffs out and reclaims orphaned Steam/Proton compatdata and shader caches"
 readme = "README.md"
 license = "MIT"
-repository = "https://github.com/PrefixPug/prefixpug"
+repository = "https://github.com/Bvaughan7/prefixpug"
 keywords = ["steam", "proton", "storage", "compatdata", "linux"]
 categories = ["command-line-utilities", "filesystem"]
 

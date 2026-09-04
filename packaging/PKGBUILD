@@ -1,10 +1,10 @@
-# Maintainer: PrefixPug Developers <https://github.com/PrefixPug/prefixpug>
+# Maintainer: Bryan Vaughan <https://github.com/Bvaughan7/prefixpug>
 pkgname=prefixpug
 pkgver=0.2.1
 pkgrel=1
 pkgdesc="Safe, high-performance Steam/Proton compatdata and shadercache sniffer"
 arch=('x86_64')
-url="https://github.com/PrefixPug/prefixpug"
+url="https://github.com/Bvaughan7/prefixpug"
 license=('MIT')
 depends=('gcc-libs')
 makedepends=('cargo')

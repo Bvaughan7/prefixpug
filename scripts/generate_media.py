@@ -88,16 +88,17 @@ def main():
         print("No frames found!")
         return
 
-    os.makedirs("/home/papab/Projects/prefixpug/assets", exist_ok=True)
+    assets_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets")
+    os.makedirs(assets_dir, exist_ok=True)
 
     print("Generating static screenshot assets/prefixpug_tui.png...")
     img_main = render_frame_to_image(frame_files[3])
-    img_main.save("/home/papab/Projects/prefixpug/assets/prefixpug_tui.png")
+    img_main.save(os.path.join(assets_dir, "prefixpug_tui.png"))
 
     print("Generating modal screenshot assets/prefixpug_modal.png...")
     # Find frame with modal
     img_modal = render_frame_to_image(frame_files[24])
-    img_modal.save("/home/papab/Projects/prefixpug/assets/prefixpug_modal.png")
+    img_modal.save(os.path.join(assets_dir, "prefixpug_modal.png"))
 
     print(f"Generating animated GIF from {len(frame_files)} frames...")
     images = [render_frame_to_image(f) for f in frame_files]
@@ -113,7 +114,7 @@ def main():
             gif_frames.append(frame.convert("RGB"))
 
     gif_frames[0].save(
-        "/home/papab/Projects/prefixpug/assets/prefixpug_demo.gif",
+        os.path.join(assets_dir, "prefixpug_demo.gif"),
         save_all=True,
         append_images=gif_frames[1:],
         duration=120,
@@ -121,7 +122,7 @@ def main():
         optimize=True
     )
     gif_frames[0].save(
-        "/home/papab/Projects/prefixpug/assets/prefixpug_tui_demo.gif",
+        os.path.join(assets_dir, "prefixpug_tui_demo.gif"),
         save_all=True,
         append_images=gif_frames[1:],
         duration=120,
@@ -129,7 +130,7 @@ def main():
         optimize=True
     )
     gif_frames[0].save(
-        "/home/papab/Projects/prefixpug/assets/prefixpug_tui_clean.gif",
+        os.path.join(assets_dir, "prefixpug_tui_clean.gif"),
         save_all=True,
         append_images=gif_frames[1:],
         duration=120,

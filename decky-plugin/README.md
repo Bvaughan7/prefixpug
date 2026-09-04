@@ -42,7 +42,7 @@ The Decky plugin uses PrefixPug's safe, headless `--json` interface:
 1. Install [Decky Loader](https://decky.xyz/) if not already installed.
 2. Ensure PrefixPug is installed on your Deck:
    ```bash
-   curl -sSL https://raw.githubusercontent.com/PrefixPug/prefixpug/main/install.sh | bash
+   curl -sSL https://raw.githubusercontent.com/Bvaughan7/prefixpug/main/install.sh | bash
    ```
 3. Copy this plugin directory to `~/homebrew/plugins/prefixpug`:
    ```bash

@@ -5,13 +5,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for filing an issue! Please ensure you have read [SAFETY.md](https://github.com/PrefixPug/prefixpug/blob/main/SAFETY.md).
+        Thanks for filing an issue! Please ensure you have read [SAFETY.md](https://github.com/Bvaughan7/prefixpug/blob/main/SAFETY.md).
   - type: input
     id: version
     attributes:
       label: PrefixPug Version
       description: Run `prefixpug --version`
-      placeholder: prefixpug 0.2.0
+      placeholder: prefixpug 0.2.1
     validations:
       required: true
   - type: textarea

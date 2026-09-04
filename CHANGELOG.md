@@ -12,7 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Steam Deck Native Decky Loader Plugin:** Included a native Decky Loader plugin in `decky-plugin/` with React/TypeScript QAM UI and Python async RPC backend for one-tap storage hygiene directly within SteamOS Game Mode.
 - **Steam Deck Storage Expansion:** Added fallback discovery paths for Steam Deck microSD storage (`/run/media/mmcblk0p1/steamapps/libraryfolders.vdf`) and Flatpak runtime directories.
 - **Anti-Cheat Runtime Protection:** Explicitly added EasyAntiCheat Runtime (`1826330`) and BattlEye Runtime (`1161040`) to the permanent infrastructure deny-list.
+- **Security & Responsible Disclosure Policy:** Added `SECURITY.md` defining supported release series and vulnerability disclosure protocols.
 - **Manpage & CLI Synchronization:** Updated `man/prefixpug.1` with documentation for `backups`, `restore`, `completions`, and `--stale`.
+
+### Changed
+- **High-Density Dashboard:** Refactored right pane into a dedicated, full-height Prefix Inspector with maximum data density and removed legacy mascot toggle hotkey.
 
 ---
 

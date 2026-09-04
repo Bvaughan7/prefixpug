@@ -27,7 +27,7 @@ Unlike generic cleanup scripts, \fBprefixpug\fR implements an uncompromising "da
 .SH COMMANDS
 .TP
 \fB(default)\fR
-Launches the interactive Synthwave Ratatui TUI dashboard. Displays disk allocation, age, detected save files, and high-value indicators (e.g., SKSE/F4SE mod loaders).
+Launches the interactive Ratatui TUI dashboard. Displays disk allocation, age, detected save files, and high-value indicators (e.g., SKSE/F4SE mod loaders).
 .TP
 \fBscan\fR [\fI--appids APPIDS\fR] [\fI--older-than DAYS\fR] [\fI--json\fR]
 Performs a read-only scan across all configured Steam libraries and prints discovered orphaned prefixes to stdout.
@@ -106,10 +106,7 @@ Select / deselect all items.
 \fBs\fR
 Cycle sort order (Size descending, Age oldest first, AppID ascending).
 .TP
-\fBm\fR
-Toggle cyberpug ASCII mascot display.
-.TP
-\fBd\fR
+\fBc\fR
 Trigger cleanup of selected items (prompts with verification modal).
 .TP
 \fBq / Esc\fR
@@ -141,7 +138,7 @@ Steam's binary index of user-added Non-Steam shortcuts.
 \fI~/.local/share/prefixpug/backups/\fR
 Default directory where save file archives and manifests are stored.
 .SH AUTHORS
-PrefixPug Developers (GitHub: @PrefixPug).
+Bryan Vaughan (GitHub: @Bvaughan7).
 .SH SEE ALSO
 .BR steam (6),
 .BR protontricks (1)

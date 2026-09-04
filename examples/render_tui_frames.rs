@@ -259,10 +259,11 @@ fn main() {
         },
     ];
 
-    let mut app = App::new(
-        mock_orphans,
-        PathBuf::from("/home/papab/.local/share/prefixpug/backups"),
-    );
+    let backup_dir = dirs::data_local_dir()
+        .map(|d| d.join("prefixpug/backups"))
+        .unwrap_or_else(|| PathBuf::from("~/.local/share/prefixpug/backups"));
+
+    let mut app = App::new(mock_orphans, backup_dir);
 
     let mut frame_id = 0;
 
