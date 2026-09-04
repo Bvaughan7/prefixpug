@@ -1,8 +1,8 @@
-# ⚡ PrefixPug
+# PrefixPug
 
 <div align="center">
 
-![PrefixPug Hero Banner](assets/hero_banner.jpg)
+![PrefixPug Banner](assets/hero_banner.jpg)
 
 **A safe Steam/Proton `compatdata` and shader cache cleaner written in Rust.**
 
@@ -12,36 +12,46 @@
 [![CI](https://img.shields.io/badge/CI-Passing-brightgreen.svg?style=for-the-badge&logo=github)](https://github.com/Bvaughan7/prefixpug/actions)
 [![Release](https://img.shields.io/badge/Release-v0.2.1-blue.svg?style=for-the-badge&logo=github)](https://github.com/Bvaughan7/prefixpug/releases)
 
-[The Safety Model](#-why-prefixpug-the-safety-model) •
-[Interactive TUI](#-interactive-synthwave-tui) •
-[CLI & Audit Mode](#-cli-commands--scripting) •
-[Installation](#-installation) •
-[Testing & Verification](#-testing--safe-sandbox) •
+[The Safety Model](#why-prefixpug-the-safety-model) •
+[Interactive TUI](#interactive-tui) •
+[CLI & Audit Mode](#cli-commands--scripting) •
+[Steam Deck](#steam-deck--decky-loader) •
+[Installation](#installation) •
+[Testing](#testing--safe-sandbox) •
 [Full Safety Spec (SAFETY.md)](SAFETY.md)
 
 </div>
 
 ---
 
-## 🛡 Why PrefixPug? (The Safety Model)
+## Why PrefixPug? (The Safety Model)
 
 When you uninstall a Steam game on Linux, Valve's client leaves behind its Proton Wine prefix (`compatdata`) and compiled graphics pipelines (`shadercache`). Over time, this accumulates single-digit to low-double-digit gigabytes of abandoned files.
 
-Writing a naive script to delete `compatdata/` folders with no matching `appmanifest_*.acf` is easy. What is difficult—and where naive scripts cause catastrophic data loss—is handling the edge cases:
+Writing a naive script to delete `compatdata/` folders with no matching `appmanifest_*.acf` is easy. What is difficult—and where naive cleaners cause catastrophic data loss—is handling real-world edge cases.
 
-1. **Non-Steam Shortcuts (`shortcuts.vdf`):** Games like *Battle.net*, *Epic Games Store*, emulators, and standalone launchers have full Proton prefixes in `compatdata`, but **never** have an `appmanifest_*.acf`. Naive cleaners destroy them. PrefixPug parses binary `shortcuts.vdf` across all user profiles to protect them.
-2. **Unmounted Multi-Library Drives:** If a secondary NVMe or external SSD is disconnected, naive cleaners treat it as empty and delete all corresponding prefixes. PrefixPug verifies all configured drives and **aborts immediately** if any library is unreachable.
-3. **Blocklist Save Vaulting (The Pug's Nose):** Games save in extensionless files, `.json`, `.xml`, `.bin`, and custom engine formats. Cleaners using extension allowlists (`.sav`, `.ess`) report "saves backed up" while silently destroying the actual save. PrefixPug archives the entire save root minus crash dumps and logs.
-4. **Fsync & Verification Before Unlink:** Save vaults are cryptographically hashed (SHA-256), compressed, and `fsync`'d to physical storage before any prefix directory is unlinked.
-5. **Symlink Escape Protection:** PrefixPug strictly ignores symlinks that resolve outside the prefix to protect your `$HOME` directory.
+| Scenario | Naive Shell Script (`rm -rf`) | PrefixPug |
+|:---|:---|:---|
+| **Disconnected Secondary Drive** | Misclassifies games as orphans and deletes live prefixes | Verifies all configured libraries and halts immediately (Exit Code 2) |
+| **Non-Steam Shortcuts (Battle.net, Heroic, emulators)** | Destroys custom prefixes (no `appmanifest`) | Ingests binary `shortcuts.vdf` across all user profiles to protect them |
+| **Local Saves (`.json`, `.xml`, extensionless)** | Silent permanent data loss | Whole-root save vaulting to SHA-256 fsynced archive before removal |
+| **Steam Running Concurrently** | Deletes files during game writes or downloads | Detects active Steam processes and aborts safely |
+| **Wine Symlinks** | Risks unlinking target directories in `$HOME` | Strict path traversal jail; never unlinks through symlinks |
 
-Read the complete engineering defense specification in [**`SAFETY.md`**](SAFETY.md).
+### Core Defenses
+1. **Multi-Library Mount Guard:** If a secondary NVMe or external SSD configured in `libraryfolders.vdf` is unmounted, PrefixPug aborts immediately rather than misclassifying games on that drive as orphans.
+2. **Non-Steam Shortcut Parser:** Ingests Steam's binary `shortcuts.vdf` across all user profiles, computing 32-bit CRC IDs and protecting custom prefixes.
+3. **Blocklist Save Engine:** Inverts traditional extension allowlists. Archives entire user directories (`Saved Games`, `Documents`, `AppData`) minus crash dumps and browser caches, preserving extensionless and `.json` saves.
+4. **Cryptographic Verification & fsync:** Every save archive is compressed, audited with per-file SHA-256 checksums in `manifest.json`, and flushed with `fsync` before any prefix directory is unlinked.
+5. **Infrastructure Deny-List:** Critical Steam runtimes (Steam Linux Runtime, Proton Experimental, Proton Hotfix, EAC, and BattlEye) are permanently locked from cleanup.
+
+Read the full technical specification in [**`SAFETY.md`**](SAFETY.md).
 
 ---
 
-## 🎨 Interactive Synthwave TUI
+## Interactive TUI
 
-PrefixPug defaults to an interactive terminal dashboard built with `ratatui`:
+PrefixPug includes an interactive terminal dashboard built with `ratatui`:
 
 <div align="center">
 
@@ -52,24 +62,24 @@ PrefixPug defaults to an interactive terminal dashboard built with `ratatui`:
 ### Controls & Keybindings
 
 | Key | Action | Description |
-| :--- | :--- | :--- |
+|:---|:---|:---|
 | `↑` / `k` | **Navigate Up** | Move cursor up through the prefix list |
 | `↓` / `j` | **Navigate Down** | Move cursor down through the list |
 | `Space` | **Toggle Selection** | Select or deselect highlighted prefix `[■]` |
 | `a` | **Select All** | Batch select or deselect all visible deletable prefixes |
 | `i` | **Invert Selection** | Flip selection across visible prefixes |
 | `s` | **Cycle Sort Mode** | Sort by Size (descending), Age (oldest first), or AppID |
-| `m` | **Toggle Mascot** | Toggle between data-dense Inspector and Cyberpug mascot |
-| `/` | **Search / Filter** | Real-time interactive filter by AppID or game title |
-| `c` | **Clean Selected** | Open the safety confirmation modal to vault and purge |
-| `?` / `h` | **Help Matrix** | Toggle control help dialog |
+| `m` | **Toggle Mascot** | Toggle between data-dense Inspector and PrefixPug Sentry |
+| `/` | **Search / Filter** | Filter by AppID or game title |
+| `c` | **Clean Selected** | Open the confirmation modal to vault saves and purge |
+| `?` / `h` | **Help Dialog** | Toggle control help dialog |
 | `q` / `Esc` | **Quit** | Close modal or exit application |
 
 ---
 
-## 🚀 CLI Commands & Scripting
+## CLI Commands & Scripting
 
-PrefixPug is safe-by-default: destructive CLI commands run in **dry-run mode** unless explicitly confirmed.
+PrefixPug is safe-by-default: destructive CLI operations run in **dry-run mode** unless explicitly confirmed.
 
 ```bash
 # Launch interactive TUI dashboard (default)
@@ -77,6 +87,9 @@ prefixpug
 
 # Read-only audit of ALL prefixes (installed, non-Steam shortcuts, runtimes, orphans)
 prefixpug audit
+
+# Filter installed games with prefixes untouched for over 90 days
+prefixpug audit --stale
 
 # Fast terminal scan of orphaned prefixes
 prefixpug scan
@@ -96,9 +109,6 @@ prefixpug clean --older-than 60 --yes
 # Low-risk mode: Clean only shader caches without touching compatdata prefixes
 prefixpug shaders --yes
 
-# Filter installed games with prefixes untouched for over 90 days
-prefixpug audit --stale
-
 # Archive save files for a specific game/prefix without deleting anything
 prefixpug vault 2141910
 
@@ -112,12 +122,15 @@ prefixpug verify-backup <BACKUP_ID>
 prefixpug restore <BACKUP_ID> --target ~/RestoredSaves/
 ```
 
-### 🎮 Steam Deck & Decky Loader
-PrefixPug includes a native SteamOS [Decky Loader plugin](decky-plugin/) for one-tap Quick Access Menu (QAM) scanning, save vaulting, and shader cache cleanup on the Steam Deck.
+---
+
+## Steam Deck & Decky Loader
+
+PrefixPug includes a native SteamOS [Decky Loader plugin](decky-plugin/) with a React/TypeScript Quick Access Menu (QAM) interface and an asynchronous Python RPC bridge. It enables one-tap prefix scanning, save vaulting, and shader cache cleanup directly inside Steam Game Mode.
 
 ---
 
-## ⚡ Installation
+## Installation
 
 ### From Source
 ```bash
@@ -125,7 +138,7 @@ git clone https://github.com/Bvaughan7/prefixpug.git
 cd prefixpug
 ./install.sh
 ```
-The installer compiles the binary with Link-Time Optimization (`lto = true`) and installs it to `~/.local/bin/prefixpug` alongside shell autocompletions.
+The installer compiles the binary with Link-Time Optimization (`lto = true`) and installs it to `~/.local/bin/prefixpug` alongside shell autocompletions (bash, fish, zsh) and manual pages.
 
 ### Standalone Static Binaries
 Download precompiled, statically linked binaries from [GitHub Releases](https://github.com/Bvaughan7/prefixpug/releases/latest):
@@ -134,7 +147,7 @@ Download precompiled, statically linked binaries from [GitHub Releases](https://
 
 ---
 
-## 🧪 Testing & Safe Sandbox
+## Testing & Safe Sandbox
 
 PrefixPug includes an end-to-end mock Steam sandbox generator to safely verify orphan detection, non-Steam shortcut protection, and save file restoration:
 
@@ -154,7 +167,7 @@ cargo test
 
 ---
 
-## ⚖ Transparency & License
+## Transparency & License
 
 - **AI Disclosure:** Developed with AI assistance; all logic, safety boundaries, and edge cases are verified by comprehensive unit and integration tests (see `tests/` and `SAFETY.md`).
 - **License:** Licensed under the [MIT License](LICENSE). Copyright (c) 2026 Bryan Vaughan.
