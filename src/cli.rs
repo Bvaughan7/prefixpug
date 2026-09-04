@@ -67,6 +67,10 @@ pub enum Commands {
         /// Filter audit to specific AppIDs (comma-separated or multiple args)
         #[arg(short, long, value_delimiter = ',')]
         appids: Vec<String>,
+
+        /// Highlight or filter installed games with prefixes untouched for months (default: 90 days)
+        #[arg(long)]
+        stale: bool,
     },
 
     /// Scan and list all orphaned compatdata and shadercache prefixes

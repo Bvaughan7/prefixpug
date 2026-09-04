@@ -367,6 +367,21 @@ fn render_inspector(f: &mut Frame, app: &App, area: Rect) {
                 Span::styled("Last Touched: ", Style::default().fg(Color::Gray)),
                 Span::styled(orphan.age_display(), Style::default().fg(NEON_YELLOW)),
             ]),
+            Line::from(vec![
+                Span::styled("Steam Cloud:  ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    if orphan.cloud_status.is_synced() {
+                        "☁ Synced (Remote Cloud Backup Available)"
+                    } else {
+                        "⚠ Not Detected (Local Saves Are ONLY Copy)"
+                    },
+                    if orphan.cloud_status.is_synced() {
+                        Style::default().fg(NEON_GREEN)
+                    } else {
+                        Style::default().fg(NEON_YELLOW)
+                    },
+                ),
+            ]),
         ];
 
         if orphan.is_high_value {

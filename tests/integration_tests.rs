@@ -315,6 +315,7 @@ fn test_p0_4_canary_save_without_extension_survives_cycle() {
         last_modified: None,
         is_high_value: false,
         high_value_reasons: vec![],
+        cloud_status: prefixpug::vdf_parser::SteamCloudStatus::default(),
         warnings: vec![],
     };
 
@@ -445,6 +446,7 @@ fn test_vault_command_and_manifest_verification() {
         detected_saves,
         is_high_value: false,
         high_value_reasons: Vec::new(),
+        cloud_status: prefixpug::vdf_parser::SteamCloudStatus::default(),
         warnings: Vec::new(),
     };
 

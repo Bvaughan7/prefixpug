@@ -416,6 +416,7 @@ mod tests {
             last_modified: None,
             is_high_value: false,
             high_value_reasons: vec![],
+            cloud_status: crate::vdf_parser::SteamCloudStatus::default(),
             warnings: vec![],
         };
         let backup_root = std::env::temp_dir().join("prefixpug_backup_test_empty");
@@ -451,6 +452,7 @@ mod tests {
             last_modified: None,
             is_high_value: false,
             high_value_reasons: vec![],
+            cloud_status: crate::vdf_parser::SteamCloudStatus::default(),
             warnings: vec![],
         };
 

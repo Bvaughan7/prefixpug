@@ -8,8 +8,8 @@ use std::time::{Duration, SystemTime};
 use walkdir::WalkDir;
 
 use crate::vdf_parser::{
-    get_infrastructure_name, infer_title_from_compatdata, InstalledGame, LibraryFolder,
-    PrefixClassification,
+    check_steam_cloud_status, get_infrastructure_name, infer_title_from_compatdata, InstalledGame,
+    LibraryFolder, PrefixClassification, SteamCloudStatus,
 };
 
 pub const DEFAULT_MAX_SAVE_ARCHIVE_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GiB cap
@@ -47,10 +47,22 @@ pub struct OrphanedPrefix {
     pub last_modified: Option<SystemTime>,
     pub is_high_value: bool,
     pub high_value_reasons: Vec<String>,
+    pub cloud_status: SteamCloudStatus,
     pub warnings: Vec<String>,
 }
 
 impl OrphanedPrefix {
+    pub fn is_stale_installed(&self, threshold_days: u64) -> bool {
+        if !matches!(self.classification, PrefixClassification::LiveGame(_)) {
+            return false;
+        }
+        if let Some(mtime) = self.last_modified {
+            if let Ok(elapsed) = SystemTime::now().duration_since(mtime) {
+                return elapsed >= Duration::from_secs(threshold_days * 86400);
+            }
+        }
+        false
+    }
     pub fn total_size(&self) -> u64 {
         self.total_apparent_bytes()
     }
@@ -513,6 +525,12 @@ pub fn scan_all_prefixes(
     older_than: Option<Duration>,
 ) -> Result<Vec<OrphanedPrefix>> {
     let mut prefixes = Vec::new();
+    let mut steam_roots: Vec<PathBuf> = libraries.iter().map(|l| l.path.clone()).collect();
+    if let Some(home) = dirs::home_dir() {
+        steam_roots.push(home.join(".steam/root"));
+        steam_roots.push(home.join(".local/share/Steam"));
+        steam_roots.push(home.join(".var/app/com.valvesoftware.Steam/.steam/root"));
+    }
 
     for lib in libraries {
         let steamapps = lib.path.join("steamapps");
@@ -641,6 +659,8 @@ pub fn scan_all_prefixes(
                     .and_then(infer_title_from_compatdata)
             });
 
+            let cloud_status = check_steam_cloud_status(&steam_roots, &appid);
+
             prefixes.push(OrphanedPrefix {
                 appid,
                 title,
@@ -654,6 +674,7 @@ pub fn scan_all_prefixes(
                 last_modified,
                 is_high_value,
                 high_value_reasons,
+                cloud_status,
                 warnings,
             });
         }

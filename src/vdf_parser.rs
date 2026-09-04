@@ -64,7 +64,9 @@ pub const INFRASTRUCTURE_APPIDS: &[(&str, &str)] = &[
     ("2348590", "Proton 8.0"),
     ("2805730", "Proton 9.0"),
     ("1493710", "Proton Experimental"),
-    ("2141910", "Proton Hotfix"),
+    ("2180100", "Proton Hotfix"),
+    ("1826330", "Proton EasyAntiCheat Runtime"),
+    ("1161040", "Proton BattlEye Runtime"),
     ("1113280", "Proton 5.9"),
     ("996510", "Steam Linux Runtime"),
 ];
@@ -74,6 +76,53 @@ pub fn get_infrastructure_name(appid: &str) -> Option<&'static str> {
         .iter()
         .find(|(id, _)| *id == appid)
         .map(|(_, name)| *name)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum SteamCloudStatus {
+    Synced,
+    #[default]
+    NotDetected,
+}
+
+impl SteamCloudStatus {
+    pub fn badge(&self) -> &'static str {
+        match self {
+            SteamCloudStatus::Synced => "[CLOUD-SYNCED]",
+            SteamCloudStatus::NotDetected => "[LOCAL-ONLY]",
+        }
+    }
+
+    pub fn is_synced(&self) -> bool {
+        matches!(self, SteamCloudStatus::Synced)
+    }
+}
+
+/// Checks whether Steam Cloud synchronizes files for this AppID by inspecting
+/// userdata/<account_id>/<appid>/remotecache.vdf or remote/ directory.
+pub fn check_steam_cloud_status(steam_roots: &[PathBuf], appid: &str) -> SteamCloudStatus {
+    for root in steam_roots {
+        let userdata = root.join("userdata");
+        if userdata.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&userdata) {
+                for entry in entries.flatten() {
+                    let app_dir = entry.path().join(appid);
+                    if app_dir.join("remotecache.vdf").is_file() {
+                        return SteamCloudStatus::Synced;
+                    }
+                    let remote_dir = app_dir.join("remote");
+                    if remote_dir.is_dir() {
+                        if let Ok(mut r_entries) = std::fs::read_dir(&remote_dir) {
+                            if r_entries.next().is_some() {
+                                return SteamCloudStatus::Synced;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    SteamCloudStatus::NotDetected
 }
 
 pub fn default_library_vdf_path() -> Result<PathBuf> {
@@ -627,6 +676,16 @@ mod tests {
             get_infrastructure_name("228980"),
             Some("Steamworks Common Redistributables")
         );
+        assert_eq!(get_infrastructure_name("2180100"), Some("Proton Hotfix"));
+        assert_eq!(
+            get_infrastructure_name("1826330"),
+            Some("Proton EasyAntiCheat Runtime")
+        );
+        assert_eq!(
+            get_infrastructure_name("1161040"),
+            Some("Proton BattlEye Runtime")
+        );
+        assert_eq!(get_infrastructure_name("2141910"), None);
         assert_eq!(get_infrastructure_name("489830"), None);
     }
 
@@ -677,5 +736,27 @@ mod tests {
         let inferred = infer_title_from_compatdata(&temp_dir);
         assert_eq!(inferred.as_deref(), Some("SkyrimSE"));
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_check_steam_cloud_status() {
+        let temp_steam = std::env::temp_dir().join("prefixpug_test_cloud");
+        let _ = std::fs::remove_dir_all(&temp_steam);
+
+        let user_app = temp_steam.join("userdata").join("12345678").join("777");
+        std::fs::create_dir_all(&user_app).unwrap();
+        std::fs::write(user_app.join("remotecache.vdf"), b"\"777\" { }").unwrap();
+
+        let roots = [temp_steam.clone()];
+        assert_eq!(
+            check_steam_cloud_status(&roots, "777"),
+            SteamCloudStatus::Synced
+        );
+        assert_eq!(
+            check_steam_cloud_status(&roots, "888"),
+            SteamCloudStatus::NotDetected
+        );
+
+        let _ = std::fs::remove_dir_all(&temp_steam);
     }
 }

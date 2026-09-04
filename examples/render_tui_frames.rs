@@ -130,6 +130,7 @@ fn main() {
             last_modified: None,
             is_high_value: true,
             high_value_reasons: vec!["Detected mod loader: skse64_loader.exe".to_string()],
+            cloud_status: prefixpug::vdf_parser::SteamCloudStatus::default(),
             warnings: vec![],
         },
         OrphanedPrefix {
@@ -160,6 +161,7 @@ fn main() {
             last_modified: None,
             is_high_value: false,
             high_value_reasons: vec![],
+            cloud_status: prefixpug::vdf_parser::SteamCloudStatus::default(),
             warnings: vec![],
         },
         OrphanedPrefix {
@@ -190,6 +192,7 @@ fn main() {
             last_modified: None,
             is_high_value: false,
             high_value_reasons: vec![],
+            cloud_status: prefixpug::vdf_parser::SteamCloudStatus::default(),
             warnings: vec![],
         },
         OrphanedPrefix {
@@ -220,6 +223,7 @@ fn main() {
             last_modified: None,
             is_high_value: false,
             high_value_reasons: vec![],
+            cloud_status: prefixpug::vdf_parser::SteamCloudStatus::default(),
             warnings: vec![],
         },
         OrphanedPrefix {
@@ -250,6 +254,7 @@ fn main() {
             last_modified: None,
             is_high_value: false,
             high_value_reasons: vec![],
+            cloud_status: prefixpug::vdf_parser::SteamCloudStatus::default(),
             warnings: vec![],
         },
     ];

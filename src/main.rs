@@ -92,42 +92,75 @@ fn execute_clean(
     Ok(cleaned_bytes)
 }
 
-fn run_audit_command(prefixes: &[OrphanedPrefix], json_mode: bool) -> Result<i32> {
+fn run_audit_command(
+    prefixes: &[OrphanedPrefix],
+    json_mode: bool,
+    stale_only: bool,
+    stale_days: u64,
+) -> Result<i32> {
+    let audit_targets: Vec<&OrphanedPrefix> = if stale_only {
+        prefixes
+            .iter()
+            .filter(|p| p.is_stale_installed(stale_days))
+            .collect()
+    } else {
+        prefixes.iter().collect()
+    };
+
     if json_mode {
-        let json_str = serde_json::to_string_pretty(prefixes)
+        let json_str = serde_json::to_string_pretty(&audit_targets)
             .context("Failed to format prefix audit as JSON")?;
         println!("{}", json_str);
-        return Ok(if prefixes.is_empty() { 4 } else { 0 });
+        return Ok(if audit_targets.is_empty() { 4 } else { 0 });
     }
 
     println!("\x1b[1;36m⚡ PREFIXPUG :: Read-Only Prefix Inventory Audit\x1b[0m");
-    println!(
-        "Total detected prefixes across all drives: {}\n",
-        prefixes.len()
-    );
+    if stale_only {
+        println!(
+            "Filtering to installed games with prefixes untouched for >{} days:\n",
+            stale_days
+        );
+    } else {
+        println!(
+            "Total detected prefixes across all drives: {}\n",
+            audit_targets.len()
+        );
+    }
 
-    if prefixes.is_empty() {
+    if audit_targets.is_empty() {
         println!("No prefixes found matching criteria.");
         return Ok(4);
     }
 
-    for p in prefixes {
+    for p in &audit_targets {
         let title_str = p.title.as_deref().unwrap_or("unknown");
         let badge = p.classification.badge();
+        let cloud_str = if p.cloud_status.is_synced() {
+            "☁ SYNCED"
+        } else {
+            "⚠ LOCAL "
+        };
         let high_val_mark = if p.is_high_value {
             " [MODS/SCRIPTS]"
         } else {
             ""
         };
+        let stale_mark = if p.is_stale_installed(stale_days) {
+            " \x1b[1;33m[STALE]\x1b[0m"
+        } else {
+            ""
+        };
         println!(
-            " • AppID: {:<8} | {:<12} | Title: {:<20} | Apparent: {:>9} | Age: {:>8} | Saves: {:>2}{}",
+            " • AppID: {:<8} | {:<12} | {:<8} | Title: {:<20} | Apparent: {:>9} | Age: {:>8} | Saves: {:>2}{}{}",
             p.appid,
             badge,
+            cloud_str,
             title_str,
             format_bytes(p.total_apparent_bytes()),
             p.age_display(),
             p.detected_saves.len(),
             high_val_mark,
+            stale_mark,
         );
     }
 
@@ -412,6 +445,7 @@ fn run_vault_command(
                 detected_saves,
                 is_high_value,
                 high_value_reasons,
+                cloud_status: vdf_parser::SteamCloudStatus::default(),
                 warnings,
             }
         } else {
@@ -451,6 +485,15 @@ fn run_vault_command(
             "  ... and {} more files",
             prefix_to_vault.detected_saves.len() - 10
         );
+    }
+
+    match prefix_to_vault.cloud_status {
+        vdf_parser::SteamCloudStatus::Synced => {
+            println!("  ☁ Steam Cloud: Synced (remote copy detected in Steam Cloud storage)");
+        }
+        vdf_parser::SteamCloudStatus::NotDetected => {
+            println!("  ⚠ Steam Cloud: Not detected (local save files vaulted here may be your ONLY copy!)");
+        }
     }
 
     println!("\nArchiving and verifying vault...");
@@ -685,7 +728,7 @@ fn run(cli: Cli) -> Result<i32> {
         .collect();
 
     match &cli.command {
-        Some(Commands::Audit { appids }) => {
+        Some(Commands::Audit { appids, stale }) => {
             let filtered: Vec<OrphanedPrefix> = if appids.is_empty() {
                 all_prefixes
             } else {
@@ -694,7 +737,8 @@ fn run(cli: Cli) -> Result<i32> {
                     .filter(|p| appids.contains(&p.appid))
                     .collect()
             };
-            run_audit_command(&filtered, cli.json)
+            let stale_days = cli.older_than.unwrap_or(90);
+            run_audit_command(&filtered, cli.json, *stale, stale_days)
         }
         Some(Commands::Scan { appids }) => {
             let filtered: Vec<OrphanedPrefix> = if appids.is_empty() {
