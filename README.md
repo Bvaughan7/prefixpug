@@ -11,7 +11,9 @@
 [![Safety: SAFETY.md](https://img.shields.io/badge/Safety-Verified_Architecture-green.svg?style=for-the-badge)](SAFETY.md)
 [![CI](https://img.shields.io/badge/CI-Passing-brightgreen.svg?style=for-the-badge&logo=github)](https://github.com/Bvaughan7/prefixpug/actions)
 [![Release](https://img.shields.io/badge/Release-v0.2.1-blue.svg?style=for-the-badge&logo=github)](https://github.com/Bvaughan7/prefixpug/releases)
+[![Website](https://img.shields.io/badge/Website-Online-cyan.svg?style=for-the-badge)](https://bvaughan7.github.io/prefixpug/)
 
+[Website](https://bvaughan7.github.io/prefixpug/) •
 [The Safety Model](#why-prefixpug-the-safety-model) •
 [Interactive TUI](#interactive-tui) •
 [CLI & Audit Mode](#cli-commands--scripting) •

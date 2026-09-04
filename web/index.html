@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PrefixPug — Safe Steam/Proton Compatdata & Shader Cache Cleaner</title>
+  <meta name="description" content="A safe, high-performance Steam/Proton compatdata and shader cache cleaner written in Rust for Linux and Steam Deck.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐾</text></svg>">
+  <style>
+    :root {
+      --bg: #090d13;
+      --card-bg: #0f1722;
+      --card-border: #1e293b;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent-cyan: #06b6d4;
+      --accent-pink: #ec4899;
+      --accent-green: #10b981;
+      --accent-purple: #8b5cf6;
+      --code-bg: #070b10;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: var(--accent-cyan);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    a:hover {
+      color: #67e8f9;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Navigation */
+    nav {
+      border-bottom: 1px solid var(--card-border);
+      background: rgba(9, 13, 19, 0.85);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .nav-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 64px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.25rem;
+      color: var(--text);
+    }
+
+    .brand-icon {
+      font-size: 1.5rem;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      font-size: 0.95rem;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+    }
+
+    .nav-links a:hover {
+      color: var(--text);
+    }
+
+    .btn-gh {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #1e293b;
+      color: var(--text) !important;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-weight: 600;
+      border: 1px solid #334155;
+      transition: all 0.2s ease;
+    }
+
+    .btn-gh:hover {
+      background: #334155;
+      border-color: #475569;
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 80px 0 50px;
+      text-align: center;
+    }
+
+    .pill-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      color: var(--accent-cyan);
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 5px 14px;
+      border-radius: 9999px;
+      margin-bottom: 24px;
+      font-family: var(--font-mono);
+    }
+
+    .hero h1 {
+      font-size: 3.25rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      line-height: 1.15;
+      margin-bottom: 20px;
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 50%, #ec4899 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      font-size: 1.25rem;
+      color: var(--text-muted);
+      max-width: 720px;
+      margin: 0 auto 36px;
+    }
+
+    /* Terminal Quick Install */
+    .install-box {
+      max-width: 640px;
+      margin: 0 auto 48px;
+      background: var(--code-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    .install-cmd {
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      color: #38bdf8;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    .copy-btn {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: var(--text);
+      cursor: pointer;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .copy-btn:hover {
+      background: #334155;
+      color: #fff;
+    }
+
+    /* TUI Mockup Window */
+    .terminal-window {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 0 auto 80px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    }
+
+    .terminal-titlebar {
+      background: #151d2a;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .window-dots {
+      display: flex;
+      gap: 7px;
+    }
+
+    .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+    }
+
+    .dot.red { background: #ef4444; }
+    .dot.yellow { background: #f59e0b; }
+    .dot.green { background: #10b981; }
+
+    .window-title {
+      flex: 1;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .terminal-media {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    /* Grid Sections */
+    .section-title {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .section-title h2 {
+      font-size: 2.25rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .section-title p {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+      margin-bottom: 80px;
+    }
+
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 28px;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-3px);
+      border-color: #38bdf8;
+    }
+
+    .feature-icon {
+      font-size: 2rem;
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+
+    .feature-card h3 {
+      font-size: 1.25rem;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .feature-card p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.55;
+    }
+
+    /* Comparison Table */
+    .table-wrapper {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      overflow-x: auto;
+      margin-bottom: 80px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.95rem;
+    }
+
+    th, td {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    th {
+      background: #141c28;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .danger-text {
+      color: #f87171;
+    }
+
+    .success-text {
+      color: #34d399;
+      font-weight: 500;
+    }
+
+    /* CLI Showcase */
+    .cli-card {
+      background: var(--code-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 80px;
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+    }
+
+    .cli-line {
+      display: flex;
+      margin-bottom: 12px;
+    }
+
+    .cli-comment {
+      color: #64748b;
+    }
+
+    .cli-cmd {
+      color: #38bdf8;
+    }
+
+    /* Decky Callout */
+    .callout {
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
+      border: 1px solid rgba(6, 182, 212, 0.25);
+      border-radius: 12px;
+      padding: 36px;
+      margin-bottom: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+
+    .callout-text h3 {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+    }
+
+    .callout-text p {
+      color: var(--text-muted);
+      max-width: 600px;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--card-border);
+      padding: 40px 0;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 768px) {
+      .hero h1 {
+        font-size: 2.25rem;
+      }
+      .install-box {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .copy-btn {
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav>
+    <div class="container nav-inner">
+      <div class="brand">
+        <span class="brand-icon">🐾</span>
+        <span>PrefixPug</span>
+      </div>
+      <div class="nav-links">
+        <a href="#safety">Safety</a>
+        <a href="#tui">TUI</a>
+        <a href="#cli">CLI</a>
+        <a href="#steamdeck">Steam Deck</a>
+        <a href="https://github.com/Bvaughan7/prefixpug/blob/main/SAFETY.md">SAFETY.md</a>
+        <a href="https://github.com/Bvaughan7/prefixpug" class="btn-gh">
+          <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <div class="pill-badge">
+        <span>v0.2.1</span>
+        <span>•</span>
+        <span>Rust Edition 2021</span>
+        <span>•</span>
+        <span>MIT Licensed</span>
+      </div>
+      <h1>Reclaim NVMe Storage <br><span class="gradient-text">Without Gambling Your Saves.</span></h1>
+      <p>A safety-first CLI and interactive TUI utility designed to sniff out and reclaim orphaned Steam/Proton compatdata prefixes and compiled shader caches on Linux and Steam Deck.</p>
+
+      <div class="install-box">
+        <span class="install-cmd" id="installCmd">curl -sSL https://raw.githubusercontent.com/Bvaughan7/prefixpug/main/install.sh | bash</span>
+        <button class="copy-btn" onclick="copyInstall()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span id="copyText">Copy</span>
+        </button>
+      </div>
+
+      <!-- TUI Preview Window -->
+      <div class="terminal-window" id="tui">
+        <div class="terminal-titlebar">
+          <div class="window-dots">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+          </div>
+          <div class="window-title">prefixpug — Interactive Terminal User Interface</div>
+        </div>
+        <img src="assets/prefixpug_tui_clean.gif" alt="PrefixPug Interactive TUI Demo" class="terminal-media">
+      </div>
+    </div>
+  </section>
+
+  <!-- Core Safety Guarantees -->
+  <section class="container" id="safety">
+    <div class="section-title">
+      <h2>The Prime Directive: Safety Above All</h2>
+      <p>Any ambiguity in drive mounts, active processes, or file types must resolve toward keeping the data. Never gamble a save to reclaim a few gigabytes.</p>
+    </div>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <span class="feature-icon">🛡️</span>
+        <h3>Multi-Library Mount Guard</h3>
+        <p>Parses all libraries from <code>libraryfolders.vdf</code>. If any secondary NVMe drive or external SSD is disconnected at scan time, PrefixPug halts immediately (Exit Code 2) rather than misclassifying games on that drive as orphans.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🎮</span>
+        <h3>Non-Steam Shortcut Parser</h3>
+        <p>Parses Valve's binary <code>shortcuts.vdf</code> across every user profile, computing 32-bit CRC directory hashes. Your hand-configured <em>Battle.net</em>, <em>Heroic</em>, and emulator prefixes are never flagged as orphans.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🐕</span>
+        <h3>The Pug's Nose (Save Vault)</h3>
+        <p>Inverts traditional extension allowlists. Sniffs entire directory trees (<code>Saved Games</code>, <code>Documents</code>, <code>AppData</code>) minus expendable caches, safely capturing extensionless, <code>.json</code>, and <code>.xml</code> saves.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">🔒</span>
+        <h3>Cryptographic Fsync Vaults</h3>
+        <p>Every save archive is compressed, audited with per-file SHA-256 hashes in <code>manifest.json</code>, and flushed with <code>File::sync_all()</code> before any prefix unlinking is permitted.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">⛔</span>
+        <h3>Infrastructure Deny-List</h3>
+        <p>Proton Experimental, Proton Hotfix, Steam Linux Runtime containers, EasyAntiCheat, and BattlEye runtimes are permanently locked from cleanup.</p>
+      </div>
+
+      <div class="feature-card">
+        <span class="feature-icon">📏</span>
+        <h3>Honest Block Accounting</h3>
+        <p>Measures actual allocated filesystem blocks (<code>st_blocks * 512</code>) rather than apparent file size, accurately accounting for Proton's sparse files and registry hives.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comparison Section -->
+  <section class="container">
+    <div class="section-title">
+      <h2>Why Not A Shell Script?</h2>
+      <p>Writing <code>rm -rf</code> against <code>compatdata</code> is easy. Handling real-world edge cases without destroying games and saves is difficult.</p>
+    </div>
+
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Scenario</th>
+            <th>Naive Shell Script (<code>rm -rf</code>)</th>
+            <th>PrefixPug</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Disconnected Drive</strong></td>
+            <td class="danger-text">Misclassifies games as orphans & destroys live prefixes</td>
+            <td class="success-text">Verifies all library mounts; aborts immediately (Exit 2)</td>
+          </tr>
+          <tr>
+            <td><strong>Non-Steam Shortcuts</strong></td>
+            <td class="danger-text">Wipes custom launchers & emulators (no appmanifest)</td>
+            <td class="success-text">Parses binary shortcuts.vdf across all user accounts</td>
+          </tr>
+          <tr>
+            <td><strong>Custom Local Saves</strong></td>
+            <td class="danger-text">Silent, permanent data loss</td>
+            <td class="success-text">Automatic SHA-256 fsynced save vaults before unlinking</td>
+          </tr>
+          <tr>
+            <td><strong>Active Game or Download</strong></td>
+            <td class="danger-text">Deletes files during live write operations</td>
+            <td class="success-text">Detects running Steam processes and aborts cleanly</td>
+          </tr>
+          <tr>
+            <td><strong>Host Symlinks</strong></td>
+            <td class="danger-text">Can traverse outside prefix and unlink $HOME files</td>
+            <td class="success-text">Strict path traversal jail; unlinks only symlink file</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- CLI Reference -->
+  <section class="container" id="cli">
+    <div class="section-title">
+      <h2>Safe-By-Default CLI & Scripting</h2>
+      <p>PrefixPug runs in dry-run simulation mode by default. Non-interactive deletion requires explicit confirmation.</p>
+    </div>
+
+    <div class="cli-card">
+      <div class="cli-line"><span class="cli-comment"># Launch interactive Ratatui TUI dashboard (default)</span></div>
+      <div class="cli-line"><span class="cli-cmd">prefixpug</span></div>
+      <br>
+      <div class="cli-line"><span class="cli-comment"># Read-only audit of ALL prefixes (installed, non-Steam, runtimes, orphans)</span></div>
+      <div class="cli-line"><span class="cli-cmd">prefixpug audit</span></div>
+      <br>
+      <div class="cli-line"><span class="cli-comment"># Filter installed games with prefixes untouched for &gt;90 days</span></div>
+      <div class="cli-line"><span class="cli-cmd">prefixpug audit --stale</span></div>
+      <br>
+      <div class="cli-line"><span class="cli-comment"># Low-risk cleanup: Purge only compiled shader caches</span></div>
+      <div class="cli-line"><span class="cli-cmd">prefixpug shaders --yes</span></div>
+      <br>
+      <div class="cli-line"><span class="cli-comment"># Archive save files for an AppID on demand without deleting the prefix</span></div>
+      <div class="cli-line"><span class="cli-cmd">prefixpug vault 1245620</span></div>
+      <br>
+      <div class="cli-line"><span class="cli-comment"># Verify a save vault against its cryptographic SHA-256 manifest</span></div>
+      <div class="cli-line"><span class="cli-cmd">prefixpug verify-backup 1245620_1725408000</span></div>
+    </div>
+  </section>
+
+  <!-- Steam Deck Callout -->
+  <section class="container" id="steamdeck">
+    <div class="callout">
+      <div class="callout-text">
+        <h3>🎮 Steam Deck & Decky Loader Plugin</h3>
+        <p>PrefixPug includes a native SteamOS Decky Loader plugin with a React Quick Access Menu (QAM) interface. Clean shader caches and vault saves directly in Gaming Mode.</p>
+      </div>
+      <a href="https://github.com/Bvaughan7/prefixpug/tree/main/decky-plugin" class="btn-gh">
+        View Decky Plugin Docs →
+      </a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/Bvaughan7/prefixpug">GitHub</a>
+        <a href="https://github.com/Bvaughan7/prefixpug/releases">Releases</a>
+        <a href="https://github.com/Bvaughan7/prefixpug/blob/main/SAFETY.md">Safety Spec</a>
+        <a href="https://github.com/Bvaughan7/prefixpug/blob/main/SECURITY.md">Security Policy</a>
+        <a href="https://github.com/Bvaughan7/prefixpug/blob/main/LICENSE">MIT License</a>
+      </div>
+      <p>© 2026 Bryan Vaughan. Developed with safety as the prime directive.</p>
+    </div>
+  </footer>
+
+  <script>
+    function copyInstall() {
+      const text = document.getElementById('installCmd').innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        const copyText = document.getElementById('copyText');
+        copyText.innerText = 'Copied!';
+        setTimeout(() => {
+          copyText.innerText = 'Copy';
+        }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>
