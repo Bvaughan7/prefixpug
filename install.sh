@@ -15,17 +15,20 @@ cp target/release/prefixpug "${INSTALL_DIR}/prefixpug"
 chmod +x "${INSTALL_DIR}/prefixpug"
 
 # Shell completions
-if [ -d "${HOME}/.local/share/bash-completion/completions" ]; then
+if [ -d "${HOME}/.local/share/bash-completion" ] || [ -d "/usr/share/bash-completion" ]; then
+    mkdir -p "${HOME}/.local/share/bash-completion/completions"
     echo "Installing bash completions..."
     "${INSTALL_DIR}/prefixpug" completions bash > "${HOME}/.local/share/bash-completion/completions/prefixpug"
 fi
 
-if [ -d "${HOME}/.zfunc" ]; then
+if [ -d "${HOME}/.zsh" ] || [ -d "${HOME}/.zfunc" ]; then
+    mkdir -p "${HOME}/.zfunc"
     echo "Installing zsh completions to ~/.zfunc/_prefixpug..."
     "${INSTALL_DIR}/prefixpug" completions zsh > "${HOME}/.zfunc/_prefixpug"
 fi
 
-if [ -d "${HOME}/.config/fish/completions" ]; then
+if [ -d "${HOME}/.config/fish" ] || [ "$(basename "${SHELL:-}")" = "fish" ]; then
+    mkdir -p "${HOME}/.config/fish/completions"
     echo "Installing fish completions..."
     "${INSTALL_DIR}/prefixpug" completions fish > "${HOME}/.config/fish/completions/prefixpug.fish"
 fi
