@@ -260,52 +260,67 @@ fn render_pug_and_details(f: &mut Frame, app: &App, area: Rect) {
     if app.show_mascot {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(9), Constraint::Min(6)])
+            .constraints([Constraint::Length(10), Constraint::Min(6)])
             .split(area);
 
-        // Mascot: clean, charming ASCII pug sentry
+        // Mascot: unmistakable ASCII dog sentry with floppy ears, paws, and curly tail
         let anim_cycle = (app.animation_frame / 6) % 4;
-        let (eyes, action) = match anim_cycle {
-            0 => ("(  o . o  )", "Sniffing save vaults..."),
-            1 => ("(  ^ . ^  )", "All saves accounted for."),
-            2 => ("(  • . •  )", "Scanning directories..."),
-            _ => ("(  - . -  )", "Standing by."),
+        let (head_line, snout_line, action) = match anim_cycle {
+            0 => (
+                "  V  (o) (o) V  ",
+                "   |   (Y)   |  ",
+                "Sniffing save vaults...",
+            ),
+            1 => ("  V  (^) (^) V  ", "   |   (▼)   |  ", "*sniff sniff*"),
+            2 => (
+                "  V  (•) (•) V  ",
+                "   |   (Y)   |  ",
+                "Digging up save candidates...",
+            ),
+            _ => (
+                "  V  (^) (^) V  ",
+                "   |   (w)   |  ",
+                "All saves accounted for.",
+            ),
         };
 
         let pug_art = vec![
-            Line::from(""),
             Line::from(vec![
-                Span::styled("       ___   ___  ", Style::default().fg(COLOR_ACCENT)),
+                Span::styled("   /^-----^\\    ", Style::default().fg(COLOR_ACCENT)),
                 Span::styled(
-                    "   PrefixPug Sentry",
+                    " PrefixPug Sentry",
                     Style::default().fg(COLOR_TEXT).add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(vec![
-                Span::styled("      /   \\_/   \\ ", Style::default().fg(COLOR_ACCENT)),
-                Span::styled(format!("   {}", action), Style::default().fg(COLOR_MUTED)),
-            ]),
-            Line::from(vec![
                 Span::styled(
-                    format!("     {} ", eyes),
+                    head_line,
                     Style::default()
                         .fg(COLOR_ACCENT)
                         .add_modifier(Modifier::BOLD),
                 ),
+                Span::styled(format!(" {}", action), Style::default().fg(COLOR_MUTED)),
+            ]),
+            Line::from(vec![
+                Span::styled(snout_line, Style::default().fg(COLOR_ACCENT)),
                 Span::styled(
-                    "   Vault: ~/.local/share/prefixpug/backups/",
+                    " Vault: ~/.local/share/prefixpug/",
                     Style::default().fg(COLOR_BORDER),
                 ),
             ]),
             Line::from(vec![
-                Span::styled("      (   =v=   ) ", Style::default().fg(COLOR_ACCENT)),
+                Span::styled("   /  \\===/  \\  ", Style::default().fg(COLOR_ACCENT)),
                 Span::styled(
-                    "   Press [m] to hide mascot",
+                    " Press [m] to hide mascot",
                     Style::default().fg(COLOR_BORDER),
                 ),
             ]),
             Line::from(vec![Span::styled(
-                "       \\_______/  ",
+                "  / /|     |\\ \\   @",
+                Style::default().fg(COLOR_ACCENT),
+            )]),
+            Line::from(vec![Span::styled(
+                " (_/ |_____| \\_) ( )",
                 Style::default().fg(COLOR_ACCENT),
             )]),
         ];

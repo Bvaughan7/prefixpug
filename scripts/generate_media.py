@@ -128,11 +128,20 @@ def main():
         loop=0,
         optimize=True
     )
+    gif_frames[0].save(
+        "/home/papab/Projects/prefixpug/assets/prefixpug_tui_clean.gif",
+        save_all=True,
+        append_images=gif_frames[1:],
+        duration=120,
+        loop=0,
+        optimize=True
+    )
     print("✓ Successfully generated:")
     print("  - assets/prefixpug_tui.png")
     print("  - assets/prefixpug_modal.png")
     print("  - assets/prefixpug_demo.gif")
     print("  - assets/prefixpug_tui_demo.gif")
+    print("  - assets/prefixpug_tui_clean.gif")
 
 if __name__ == "__main__":
     main()

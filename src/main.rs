@@ -92,6 +92,17 @@ fn execute_clean(
     Ok(cleaned_bytes)
 }
 
+fn print_cli_dog_banner(title: &str, subtitle: &str) {
+    if std::io::stdout().is_terminal() {
+        println!("  \x1b[36m/^-----^\\\x1b[0m    \x1b[1;36m{}\x1b[0m", title);
+        println!(" \x1b[36mV  (o) (o) V\x1b[0m  \x1b[90m{}\x1b[0m", subtitle);
+        println!("  \x1b[36m|   (Y)   |\x1b[0m");
+        println!(" \x1b[36m/ `-------' \\\x1b[0m\n");
+    } else {
+        println!("{}: {}", title, subtitle);
+    }
+}
+
 fn run_audit_command(
     prefixes: &[OrphanedPrefix],
     json_mode: bool,
@@ -114,18 +125,18 @@ fn run_audit_command(
         return Ok(if audit_targets.is_empty() { 4 } else { 0 });
     }
 
-    println!("\x1b[1;36mPrefixPug :: Read-Only Prefix Inventory Audit\x1b[0m");
-    if stale_only {
-        println!(
-            "Filtering to installed games with prefixes untouched for >{} days:\n",
+    let subtitle = if stale_only {
+        format!(
+            "Filtering to installed games untouched for >{} days",
             stale_days
-        );
+        )
     } else {
-        println!(
-            "Total detected prefixes across all drives: {}\n",
+        format!(
+            "Total detected prefixes across mounted libraries: {}",
             audit_targets.len()
-        );
-    }
+        )
+    };
+    print_cli_dog_banner("PrefixPug :: Read-Only Prefix Inventory Audit", &subtitle);
 
     if audit_targets.is_empty() {
         println!("No prefixes found matching criteria.");
@@ -175,8 +186,10 @@ fn run_scan_command(orphans: &[OrphanedPrefix], json_mode: bool) -> Result<i32> 
         return Ok(if orphans.is_empty() { 4 } else { 0 });
     }
 
-    println!("\x1b[1;36mPrefixPug :: Steam/Proton Storage Scan\x1b[0m");
-    println!("Found {} orphaned prefix candidate(s):\n", orphans.len());
+    print_cli_dog_banner(
+        "PrefixPug :: Steam/Proton Storage Scan",
+        &format!("Found {} orphaned prefix candidate(s):", orphans.len()),
+    );
 
     if orphans.is_empty() {
         println!("No orphaned prefixes detected. Your storage is clean.");
@@ -232,10 +245,12 @@ fn run_clean_command(
     let is_explicit_dry_run = cli.dry_run;
     let is_authorized_live = cli.yes || cli.auto_clean || purge_requested;
 
-    println!("\x1b[1;36mPrefixPug :: Cleanup Target Summary\x1b[0m");
-    if is_explicit_dry_run || !is_authorized_live {
-        println!("\x1b[1;33m[SAFE DEFAULT: Review targets below. Deletions require explicit confirmation]\x1b[0m");
-    }
+    let sub = if is_explicit_dry_run || !is_authorized_live {
+        "[SAFE DEFAULT: Review targets below. Deletions require explicit confirmation]"
+    } else {
+        "Reclamation mode active"
+    };
+    print_cli_dog_banner("PrefixPug :: Cleanup Target Summary", sub);
 
     let total_reclaimable: u64 = targets.iter().map(|o| o.total_size()).sum();
     for t in &targets {
