@@ -55,7 +55,7 @@ PrefixPug includes an interactive terminal dashboard built with `ratatui`:
 
 <div align="center">
 
-![PrefixPug Interactive TUI Demo](assets/prefixpug_demo.gif)
+![PrefixPug Interactive TUI Demo](assets/prefixpug_tui_demo.gif)
 
 </div>
 

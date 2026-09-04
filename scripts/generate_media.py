@@ -28,8 +28,8 @@ def render_frame_to_image(json_path):
     img_width = term_width + PADDING * 2
     img_height = term_height + HEADER_HEIGHT + PADDING * 2
 
-    # Cyberpunk dark background with subtle violet glow
-    img = Image.new("RGBA", (img_width, img_height), (10, 8, 20, 255))
+    # Modern developer terminal dark background
+    img = Image.new("RGBA", (img_width, img_height), (9, 12, 17, 255))
     draw = ImageDraw.Draw(img)
 
     # Window body
@@ -39,12 +39,12 @@ def render_frame_to_image(json_path):
     win_y1 = img_height - PADDING
 
     # Rounded terminal window background
-    draw.rounded_rectangle([win_x0, win_y0, win_x1, win_y1], radius=10, fill=(15, 12, 28, 255), outline=(255, 20, 147, 180), width=2)
+    draw.rounded_rectangle([win_x0, win_y0, win_x1, win_y1], radius=10, fill=(13, 17, 24, 255), outline=(45, 58, 76, 255), width=1)
 
     # Titlebar
-    draw.rounded_rectangle([win_x0, win_y0, win_x1, win_y0 + HEADER_HEIGHT], radius=10, fill=(22, 18, 38, 255))
-    draw.rectangle([win_x0, win_y0 + HEADER_HEIGHT - 6, win_x1, win_y0 + HEADER_HEIGHT], fill=(22, 18, 38, 255))
-    draw.line([win_x0, win_y0 + HEADER_HEIGHT, win_x1, win_y0 + HEADER_HEIGHT], fill=(50, 40, 75, 255), width=1)
+    draw.rounded_rectangle([win_x0, win_y0, win_x1, win_y0 + HEADER_HEIGHT], radius=10, fill=(20, 26, 36, 255))
+    draw.rectangle([win_x0, win_y0 + HEADER_HEIGHT - 6, win_x1, win_y0 + HEADER_HEIGHT], fill=(20, 26, 36, 255))
+    draw.line([win_x0, win_y0 + HEADER_HEIGHT, win_x1, win_y0 + HEADER_HEIGHT], fill=(35, 45, 60, 255), width=1)
 
     # Window control dots
     dots = [
@@ -58,7 +58,7 @@ def render_frame_to_image(json_path):
     # Window title
     title = "prefixpug (ratatui)"
     title_w = draw.textlength(title, font=font)
-    draw.text((win_x0 + (term_width - title_w) // 2, win_y0 + 10), title, font=font, fill=(0, 245, 255))
+    draw.text((win_x0 + (term_width - title_w) // 2, win_y0 + 10), title, font=font, fill=(160, 185, 210))
 
     # Render terminal cells
     grid_x0 = win_x0
@@ -74,7 +74,7 @@ def render_frame_to_image(json_path):
         px = grid_x0 + x * CHAR_WIDTH
         py = grid_y0 + y * CHAR_HEIGHT
 
-        if bg != (15, 12, 28):
+        if bg != (13, 17, 24):
             draw.rectangle([px, py, px + CHAR_WIDTH, py + CHAR_HEIGHT], fill=bg)
 
         if ch and ch != " ":
@@ -120,10 +120,19 @@ def main():
         loop=0,
         optimize=True
     )
+    gif_frames[0].save(
+        "/home/papab/Projects/prefixpug/assets/prefixpug_tui_demo.gif",
+        save_all=True,
+        append_images=gif_frames[1:],
+        duration=120,
+        loop=0,
+        optimize=True
+    )
     print("✓ Successfully generated:")
     print("  - assets/prefixpug_tui.png")
     print("  - assets/prefixpug_modal.png")
     print("  - assets/prefixpug_demo.gif")
+    print("  - assets/prefixpug_tui_demo.gif")
 
 if __name__ == "__main__":
     main()

@@ -28,7 +28,7 @@ struct RenderFrame {
 fn color_to_rgb(c: ratatui::style::Color) -> (u8, u8, u8) {
     match c {
         ratatui::style::Color::Rgb(r, g, b) => (r, g, b),
-        ratatui::style::Color::Black => (15, 12, 28),
+        ratatui::style::Color::Black => (13, 17, 24),
         ratatui::style::Color::Red => (255, 69, 58),
         ratatui::style::Color::Green => (50, 205, 50),
         ratatui::style::Color::Yellow => (255, 215, 0),
@@ -62,7 +62,7 @@ fn capture_frame(terminal: &mut Terminal<TestBackend>, app: &App) -> RenderFrame
             let cell = buf.cell((x, y)).expect("cell");
             let fg = color_to_rgb(cell.fg);
             let bg = match cell.bg {
-                ratatui::style::Color::Reset => (15, 12, 28),
+                ratatui::style::Color::Reset => (13, 17, 24),
                 c => color_to_rgb(c),
             };
             cells.push(RenderCell {
