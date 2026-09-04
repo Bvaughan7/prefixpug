@@ -6,11 +6,14 @@ echo -e "\033[1;36mPREFIXPUG :: Installing PrefixPug locally...\033[0m"
 INSTALL_DIR="${HOME}/.local/bin"
 mkdir -p "${INSTALL_DIR}"
 
-echo "Compiling optimized release binary..."
-cargo build --release
-
-echo "Installing binary to ${INSTALL_DIR}/prefixpug..."
-cp target/release/prefixpug "${INSTALL_DIR}/prefixpug"
+if command -v cargo >/dev/null 2>&1 && [ -f "Cargo.toml" ]; then
+    echo "Compiling optimized release binary from local source..."
+    cargo build --release
+    cp target/release/prefixpug "${INSTALL_DIR}/prefixpug"
+else
+    echo "Downloading precompiled statically linked binary (musl) from GitHub Releases..."
+    curl -sSL "https://github.com/Bvaughan7/prefixpug/releases/latest/download/prefixpug-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C "${INSTALL_DIR}"
+fi
 chmod +x "${INSTALL_DIR}/prefixpug"
 
 # Shell completions
@@ -33,9 +36,11 @@ if [ -d "${HOME}/.config/fish" ] || [ "$(basename "${SHELL:-}")" = "fish" ]; the
 fi
 
 # Man page
-MANDIR="${HOME}/.local/share/man/man1"
-mkdir -p "${MANDIR}"
-cp man/prefixpug.1 "${MANDIR}/prefixpug.1"
+if [ -f "man/prefixpug.1" ]; then
+    MANDIR="${HOME}/.local/share/man/man1"
+    mkdir -p "${MANDIR}"
+    cp man/prefixpug.1 "${MANDIR}/prefixpug.1"
+fi
 
 echo -e "\033[1;32m✓ PrefixPug successfully installed to ${INSTALL_DIR}/prefixpug\033[0m"
 
