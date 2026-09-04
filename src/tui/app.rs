@@ -57,7 +57,7 @@ impl App {
             show_mascot: true, // Cyberpug mascot sentry enabled by default
             animation_frame: 0,
             status_message: if is_empty {
-                "✨ Storage clean. 0 orphaned prefixes detected.".to_string()
+                "Storage clean. 0 orphaned prefixes detected.".to_string()
             } else {
                 "Ready. [Space] to select, [c] to review and clean.".to_string()
             },
