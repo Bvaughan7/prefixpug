@@ -559,7 +559,6 @@ fn run_tui_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
                             KeyCode::Char('a') | KeyCode::Char('A') => app.toggle_all(),
                             KeyCode::Char('i') | KeyCode::Char('I') => app.invert_selection(),
                             KeyCode::Char('s') | KeyCode::Char('S') => app.toggle_sort(),
-                            KeyCode::Char('m') | KeyCode::Char('M') => app.toggle_mascot(),
                             KeyCode::Char('/') => {
                                 app.state = AppState::Filtering;
                                 app.filter_query.clear();

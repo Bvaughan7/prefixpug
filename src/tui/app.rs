@@ -28,7 +28,6 @@ pub struct App {
     pub cursor_index: usize,
     pub state: AppState,
     pub sort_mode: SortMode,
-    pub show_mascot: bool, // Togglable with 'm' (off by default for maximum data density)
     pub animation_frame: usize,
     pub status_message: String,
     pub backup_dir: PathBuf,
@@ -54,7 +53,6 @@ impl App {
             cursor_index: 0,
             state: AppState::Browsing,
             sort_mode: SortMode::Size,
-            show_mascot: true, // Cyberpug mascot sentry enabled by default
             animation_frame: 0,
             status_message: if is_empty {
                 "Storage clean. 0 orphaned prefixes detected.".to_string()
@@ -69,16 +67,6 @@ impl App {
 
     pub fn tick(&mut self) {
         self.animation_frame = (self.animation_frame + 1) % 120;
-    }
-
-    pub fn toggle_mascot(&mut self) {
-        self.show_mascot = !self.show_mascot;
-        self.status_message = if self.show_mascot {
-            "Mascot display enabled. Press [m] to hide."
-        } else {
-            "Data-dense layout active. Press [m] to show mascot."
-        }
-        .to_string();
     }
 
     pub fn current_orphan(&self) -> Option<&OrphanedPrefix> {
