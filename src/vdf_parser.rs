@@ -135,8 +135,13 @@ pub fn default_library_vdf_path() -> Result<PathBuf> {
             home.join(
                 ".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/libraryfolders.vdf",
             ),
-            // Steam Deck specific path
+            home.join(".var/app/com.valvesoftware.Steam/data/Steam/steamapps/libraryfolders.vdf"),
+            // Steam Deck specific paths
             PathBuf::from("/home/deck/.local/share/Steam/steamapps/libraryfolders.vdf"),
+            PathBuf::from("/home/deck/.steam/root/steamapps/libraryfolders.vdf"),
+            PathBuf::from("/home/deck/.steam/steam/steamapps/libraryfolders.vdf"),
+            // Removable media / SD card Steam Deck mount
+            PathBuf::from("/run/media/mmcblk0p1/steamapps/libraryfolders.vdf"),
         ];
 
         for candidate in &candidates {

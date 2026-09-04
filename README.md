@@ -95,6 +95,12 @@ prefixpug clean --older-than 60 --yes
 # Low-risk mode: Clean only shader caches without touching compatdata prefixes
 prefixpug shaders --yes
 
+# Filter installed games with prefixes untouched for over 90 days
+prefixpug audit --stale
+
+# Archive save files for a specific game/prefix without deleting anything
+prefixpug vault 2141910
+
 # List all archived save vaults
 prefixpug backups
 
@@ -104,6 +110,9 @@ prefixpug verify-backup <BACKUP_ID>
 # Restore save files from an archive
 prefixpug restore <BACKUP_ID> --target ~/RestoredSaves/
 ```
+
+### 🎮 Steam Deck & Decky Loader
+PrefixPug includes a native SteamOS [Decky Loader plugin](decky-plugin/) for one-tap Quick Access Menu (QAM) scanning, save vaulting, and shader cache cleanup on the Steam Deck.
 
 ---
 

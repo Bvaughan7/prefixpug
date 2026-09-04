@@ -1,6 +1,6 @@
 [package]
 name = "prefixpug"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["PrefixPug Developers <https://github.com/PrefixPug/prefixpug>"]
 description = "Safely sniffs out and reclaims orphaned Steam/Proton compatdata and shader caches"

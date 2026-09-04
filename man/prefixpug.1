@@ -1,4 +1,4 @@
-.TH PREFIXPUG 1 "September 2026" "prefixpug 0.2.0" "User Commands"
+.TH PREFIXPUG 1 "September 2026" "prefixpug 0.2.1" "User Commands"
 .SH NAME
 prefixpug \- safe, high-performance Steam/Proton compatdata and shadercache sniffer
 .SH SYNOPSIS
@@ -29,23 +29,32 @@ Unlike generic cleanup scripts, \fBprefixpug\fR implements an uncompromising "da
 \fB(default)\fR
 Launches the interactive Synthwave Ratatui TUI dashboard. Displays disk allocation, age, detected save files, and high-value indicators (e.g., SKSE/F4SE mod loaders).
 .TP
-\fBscan\fR [\fI--older-than DAYS\fR] [\fI--json\fR]
+\fBscan\fR [\fI--appids APPIDS\fR] [\fI--older-than DAYS\fR] [\fI--json\fR]
 Performs a read-only scan across all configured Steam libraries and prints discovered orphaned prefixes to stdout.
 .TP
-\fBaudit\fR
-Runs a comprehensive safety diagnostic check against the local Steam environment, inspecting library mounts, Steam process lock states, active Non-Steam shortcuts, and backup directory permissions.
+\fBaudit\fR [\fI--stale\fR] [\fI--appids APPIDS\fR] [\fI--json\fR]
+Runs a comprehensive safety diagnostic check against the local Steam environment, inspecting library mounts, Steam process lock states, active Non-Steam shortcuts, and backup directory permissions. When \fB--stale\fR is passed, filters and displays installed games whose compatdata has not been modified in over 90 days.
 .TP
-\fBclean\fR [\fI--dry-run\fR] [\fI--yes\fR] [\fI--purge\fR] [\fI--older-than DAYS\fR] [\fI--shaders-only\fR] [\fI--no-backup\fR]
+\fBclean\fR [\fI--appids APPIDS\fR] [\fI--dry-run\fR] [\fI--yes\fR] [\fI--purge\fR] [\fI--older-than DAYS\fR] [\fI--shaders-only\fR] [\fI--no-backup\fR]
 Cleans orphaned compatdata and shader directories. By default, runs in safe \fB--dry-run\fR simulation mode unless \fB--yes\fR or \fB--purge\fR is explicitly specified.
 .TP
-\fBshaders\fR [\fI--yes\fR]
+\fBshaders\fR [\fI--appids APPIDS\fR] [\fI--yes\fR]
 Zero-risk shortcut command to clean only orphaned shader caches, leaving Proton prefixes intact.
 .TP
 \fBvault\fR \fI<APPID>\fR
 Sniffs and archives the save files for a specific AppID prefix into the backup directory without modifying or deleting the prefix.
 .TP
-\fBverify-backup\fR \fI<APPID>\fR
-Verifies the integrity of existing backup archives for the given AppID using SHA-256 checksums and tarball structure inspection.
+\fBbackups\fR [\fI--json\fR]
+Lists all archived save vaults stored in \fB~/.local/share/prefixpug/backups/\fR.
+.TP
+\fBverify-backup\fR \fI<BACKUP_ID>\fR
+Verifies the integrity of existing backup archives for the given backup identifier using SHA-256 checksums and tarball structure inspection.
+.TP
+\fBrestore\fR \fI<BACKUP_ID>\fR [\fI--target DEST\fR]
+Restores save files from an archived backup vault into the designated destination directory (defaults to current directory).
+.TP
+\fBcompletions\fR \fI<SHELL>\fR
+Generates shell completion scripts for \fBbash\fR, \fBzsh\fR, \fBfish\fR, \fBelvish\fR, or \fBpowershell\fR.
 .SH OPTIONS
 .TP
 \fB-p\fR, \fB--path\fR \fI<PATH>\fR

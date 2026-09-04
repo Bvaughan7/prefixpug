@@ -1,6 +1,6 @@
 # Maintainer: PrefixPug Developers <https://github.com/PrefixPug/prefixpug>
 pkgname=prefixpug
-pkgver=0.2.0
+pkgver=0.2.1
 pkgrel=1
 pkgdesc="Safe, high-performance Steam/Proton compatdata and shadercache sniffer"
 arch=('x86_64')

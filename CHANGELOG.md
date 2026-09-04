@@ -4,6 +4,16 @@ All notable changes to **PrefixPug** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-09-03
+
+### Added
+- **Steam Cloud Sync Intelligence:** Scans user account `remotecache.vdf` and `remote/` directories to determine whether local prefix saves have synchronized upstream cloud backups (`SteamCloudStatus::Synced` vs `NotDetected`).
+- **Stale Prefix Audit:** Added `--stale` flag to `prefixpug audit` to filter and highlight installed games whose prefixes have not been modified in >90 days.
+- **Steam Deck Native Decky Loader Plugin:** Included a native Decky Loader plugin in `decky-plugin/` with React/TypeScript QAM UI and Python async RPC backend for one-tap storage hygiene directly within SteamOS Game Mode.
+- **Steam Deck Storage Expansion:** Added fallback discovery paths for Steam Deck microSD storage (`/run/media/mmcblk0p1/steamapps/libraryfolders.vdf`) and Flatpak runtime directories.
+- **Anti-Cheat Runtime Protection:** Explicitly added EasyAntiCheat Runtime (`1826330`) and BattlEye Runtime (`1161040`) to the permanent infrastructure deny-list.
+- **Manpage & CLI Synchronization:** Updated `man/prefixpug.1` with documentation for `backups`, `restore`, `completions`, and `--stale`.
+
 ---
 
 ## [0.2.0] - 2026-09-03

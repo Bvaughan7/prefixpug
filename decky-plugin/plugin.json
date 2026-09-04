@@ -1,0 +1,7 @@
+{
+  "name": "PrefixPug",
+  "author": "PrefixPug Developers",
+  "flags": ["root"],
+  "description": "Safely sniff out and reclaim orphaned Steam/Proton compatdata and shader caches on Steam Deck.",
+  "version": "0.2.1"
+}
