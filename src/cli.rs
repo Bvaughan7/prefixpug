@@ -6,7 +6,7 @@ use std::path::PathBuf;
     name = "prefixpug",
     author,
     version,
-    about = "Safely sniffs out and reclaims orphaned Steam/Proton compatdata and shader caches",
+    about = "⚡ Safely sniffs out and reclaims orphaned Steam/Proton compatdata and shader caches",
     long_about = "A safe Rust utility to reclaim storage by identifying orphaned Steam/Proton \
                   compatdata and shader caches. Protects non-Steam shortcuts, respects multi-library \
                   mounts, and automatically archives local save files to an fsynced vault before removal."

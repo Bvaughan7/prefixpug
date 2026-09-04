@@ -114,7 +114,7 @@ fn run_audit_command(
         return Ok(if audit_targets.is_empty() { 4 } else { 0 });
     }
 
-    println!("\x1b[1;36mPrefixPug :: Read-Only Prefix Inventory Audit\x1b[0m");
+    println!("\x1b[1;36m⚡ PREFIXPUG :: Read-Only Prefix Inventory Audit\x1b[0m");
     if stale_only {
         println!(
             "Filtering to installed games with prefixes untouched for >{} days:\n",
@@ -175,11 +175,11 @@ fn run_scan_command(orphans: &[OrphanedPrefix], json_mode: bool) -> Result<i32> 
         return Ok(if orphans.is_empty() { 4 } else { 0 });
     }
 
-    println!("\x1b[1;36mPrefixPug :: Steam/Proton Storage Scan\x1b[0m");
+    println!("\x1b[1;35m⚡ PREFIXPUG :: Steam/Proton Storage Scan\x1b[0m");
     println!("Found {} orphaned prefix candidate(s):\n", orphans.len());
 
     if orphans.is_empty() {
-        println!("No orphaned prefixes detected. Your storage is clean.");
+        println!("✨ No orphaned prefixes detected. Your storage is squeaky clean!");
         return Ok(4);
     }
 
@@ -232,7 +232,7 @@ fn run_clean_command(
     let is_explicit_dry_run = cli.dry_run;
     let is_authorized_live = cli.yes || cli.auto_clean || purge_requested;
 
-    println!("\x1b[1;36mPrefixPug :: Cleanup Target Summary\x1b[0m");
+    println!("\x1b[1;35m⚡ PREFIXPUG :: Cleanup Target Summary\x1b[0m");
     if is_explicit_dry_run || !is_authorized_live {
         println!("\x1b[1;33m[SAFE DEFAULT: Review targets below. Deletions require explicit confirmation]\x1b[0m");
     }
@@ -308,12 +308,12 @@ fn run_clean_command(
 
     if measured_delta > 0 {
         println!(
-            "\nReclamation complete! Measured disk space recovered: \x1b[1;32m{}\x1b[0m",
+            "\n🎉 Reclamation complete! Measured disk space recovered: \x1b[1;32m{}\x1b[0m",
             format_bytes(measured_delta)
         );
     } else {
         println!(
-            "\nReclamation complete! Recovered ~{}",
+            "\n🎉 Reclamation complete! Recovered ~{}",
             format_bytes(total_reclaimable)
         );
     }
@@ -331,7 +331,7 @@ fn run_backups_command(backup_root: &Path, json_mode: bool) -> Result<i32> {
         return Ok(if records.is_empty() { 4 } else { 0 });
     }
 
-    println!("\x1b[1;36mPrefixPug :: Vaulted Save Backups\x1b[0m");
+    println!("\x1b[1;35m⚡ PREFIXPUG :: Vaulted Save Backups\x1b[0m");
     println!("Backup root: {:?}\n", backup_root);
 
     if records.is_empty() {
@@ -404,7 +404,7 @@ fn run_vault_command(
     all_prefixes: &[OrphanedPrefix],
     backup_root: &Path,
 ) -> Result<i32> {
-    println!("\x1b[1;36mPrefixPug :: Save Vault Sniffer\x1b[0m");
+    println!("\x1b[1;35m⚡ PREFIXPUG :: Save Vault Sniffer\x1b[0m");
     println!("Target: {}\n", appid);
 
     let target = all_prefixes.iter().find(|p| {

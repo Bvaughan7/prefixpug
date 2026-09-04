@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo -e "\033[1;36mPREFIXPUG :: Installing PrefixPug locally...\033[0m"
+# PrefixPug Local Installer
+echo -e "\033[1;35m⚡ PREFIXPUG :: Installing PrefixPug locally...\033[0m"
 
 INSTALL_DIR="${HOME}/.local/bin"
 mkdir -p "${INSTALL_DIR}"
