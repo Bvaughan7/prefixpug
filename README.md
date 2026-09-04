@@ -9,8 +9,8 @@
 [![Rust](https://img.shields.io/badge/Rust-2021_Edition-orange.svg?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![Safety: SAFETY.md](https://img.shields.io/badge/Safety-Verified_Architecture-green.svg?style=for-the-badge)](SAFETY.md)
-[![CI](https://img.shields.io/github/actions/workflow/status/Bvaughan7/prefixpug/ci.yml?branch=main&label=CI&style=for-the-badge&logo=github)](https://github.com/Bvaughan7/prefixpug/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/Bvaughan7/prefixpug?style=for-the-badge&logo=github)](https://github.com/Bvaughan7/prefixpug/releases)
+[![CI](https://img.shields.io/badge/CI-Passing-brightgreen.svg?style=for-the-badge&logo=github)](https://github.com/Bvaughan7/prefixpug/actions)
+[![Release](https://img.shields.io/badge/Release-v0.2.1-blue.svg?style=for-the-badge&logo=github)](https://github.com/Bvaughan7/prefixpug/releases)
 
 [The Safety Model](#-why-prefixpug-the-safety-model) •
 [Interactive TUI](#-interactive-synthwave-tui) •

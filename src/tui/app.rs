@@ -38,16 +38,13 @@ pub struct App {
 
 impl App {
     pub fn new(orphans: Vec<OrphanedPrefix>, backup_dir: PathBuf) -> Self {
-        let mut selected_appids = HashSet::new();
-        for o in &orphans {
-            // Only auto-select genuinely deletable orphans
-            if o.is_deletable() {
-                selected_appids.insert(o.appid.clone());
-            }
-        }
-
-        let count = orphans.len();
-        let filtered_indices = (0..count).collect();
+        let is_empty = orphans.is_empty();
+        let selected_appids: HashSet<String> = orphans
+            .iter()
+            .filter(|o| o.is_deletable())
+            .map(|o| o.appid.clone())
+            .collect();
+        let filtered_indices: Vec<usize> = (0..orphans.len()).collect();
 
         Self {
             all_orphans: orphans,
@@ -59,9 +56,11 @@ impl App {
             sort_mode: SortMode::Size,
             show_mascot: false, // Default to data-dense layout
             animation_frame: 0,
-            status_message:
-                "Ready. [Space] Select | [a] All | [c] Clean | [/] Filter | [m] Mascot | [?] Help | [q] Quit"
-                    .to_string(),
+            status_message: if is_empty {
+                "✨ Storage clean. 0 orphaned prefixes detected.".to_string()
+            } else {
+                "Ready. [Space] to select, [c] to review and clean.".to_string()
+            },
             backup_dir,
             space_reclaimed: 0,
             should_quit: false,

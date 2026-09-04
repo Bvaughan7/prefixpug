@@ -74,7 +74,10 @@ fn render_header(f: &mut Frame, area: Rect) {
             "Steam/Proton Prefix Reclamation Rig",
             Style::default().fg(NEON_CYAN),
         ),
-        Span::styled(" [SYNTHWAVE v0.1] ⚡", Style::default().fg(NEON_YELLOW)),
+        Span::styled(
+            format!(" [SYNTHWAVE v{}] ⚡", env!("CARGO_PKG_VERSION")),
+            Style::default().fg(NEON_YELLOW),
+        ),
     ]);
 
     let block = Block::default()
@@ -443,6 +446,81 @@ fn render_inspector(f: &mut Frame, app: &App, area: Rect) {
         }
 
         lines
+    } else if app.all_orphans.is_empty() {
+        vec![
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "  ✨ STORAGE SQUEAKY CLEAN",
+                Style::default().fg(NEON_GREEN).add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "  No abandoned or orphaned Steam prefixes found.",
+                Style::default().fg(Color::White),
+            )]),
+            Line::from(vec![Span::styled(
+                "  All Wine/Proton prefixes belong to live games or shortcuts.",
+                Style::default().fg(Color::Gray),
+            )]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "  💡 Quick Actions:",
+                Style::default().fg(NEON_CYAN).add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![
+                Span::styled("   • ", Style::default().fg(NEON_PINK)),
+                Span::styled(
+                    "prefixpug audit",
+                    Style::default()
+                        .fg(NEON_YELLOW)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "        Inventory all installed games",
+                    Style::default().fg(Color::Gray),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("   • ", Style::default().fg(NEON_PINK)),
+                Span::styled(
+                    "prefixpug audit --stale",
+                    Style::default()
+                        .fg(NEON_YELLOW)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "  Audit games untouched >90 days",
+                    Style::default().fg(Color::Gray),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("   • ", Style::default().fg(NEON_PINK)),
+                Span::styled(
+                    "prefixpug shaders",
+                    Style::default()
+                        .fg(NEON_YELLOW)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "      Reclaim space from GPU caches",
+                    Style::default().fg(Color::Gray),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  Press ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    "[q]",
+                    Style::default().fg(NEON_PINK).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" or ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    "[Esc]",
+                    Style::default().fg(NEON_PINK).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" to exit.", Style::default().fg(Color::Gray)),
+            ]),
+        ]
     } else {
         vec![Line::from(Span::styled(
             "Select a prefix from the list to inspect details.",
