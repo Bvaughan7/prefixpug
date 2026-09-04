@@ -64,7 +64,6 @@ pub fn render(f: &mut Frame, app: &App) {
 
 fn render_header(f: &mut Frame, area: Rect) {
     let title = Line::from(vec![
-        Span::styled("⚡ ", Style::default().fg(NEON_YELLOW)),
         Span::styled(
             "PREFIXPUG",
             Style::default().fg(NEON_PINK).add_modifier(Modifier::BOLD),
@@ -75,7 +74,7 @@ fn render_header(f: &mut Frame, area: Rect) {
             Style::default().fg(NEON_CYAN),
         ),
         Span::styled(
-            format!(" [SYNTHWAVE v{}] ⚡", env!("CARGO_PKG_VERSION")),
+            format!(" [v{}]", env!("CARGO_PKG_VERSION")),
             Style::default().fg(NEON_YELLOW),
         ),
     ]);
@@ -635,7 +634,7 @@ fn render_confirm_dialog(f: &mut Frame, app: &App, area: Rect) {
         ]),
         Line::from(""),
         Line::from(Span::styled(
-            "  ⚡ The Pug's Nose will bury (backup) all saves to:",
+            "  • The Pug's Nose will bury (backup) all saves to:",
             Style::default().fg(NEON_CYAN),
         )),
         Line::from(Span::styled(

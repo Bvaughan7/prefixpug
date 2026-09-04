@@ -56,8 +56,9 @@ def render_frame_to_image(json_path):
         draw.ellipse([x - 5, y - 5, x + 5, y + 5], fill=col)
 
     # Window title
-    title = "⚡ PREFIXPUG :: SYNTHWAVE RIG [ratatui]"
-    draw.text((win_x0 + term_width // 2 - 140, win_y0 + 10), title, font=font, fill=(0, 245, 255))
+    title = "prefixpug (ratatui)"
+    title_w = draw.textlength(title, font=font)
+    draw.text((win_x0 + (term_width - title_w) // 2, win_y0 + 10), title, font=font, fill=(0, 245, 255))
 
     # Render terminal cells
     grid_x0 = win_x0

@@ -54,7 +54,7 @@ impl App {
             cursor_index: 0,
             state: AppState::Browsing,
             sort_mode: SortMode::Size,
-            show_mascot: false, // Default to data-dense layout
+            show_mascot: true, // Cyberpug mascot sentry enabled by default
             animation_frame: 0,
             status_message: if is_empty {
                 "✨ Storage clean. 0 orphaned prefixes detected.".to_string()
