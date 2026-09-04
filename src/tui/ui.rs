@@ -55,7 +55,7 @@ pub fn render(f: &mut Frame, app: &App) {
         .split(chunks[1]);
 
     render_orphan_list(f, app, main_chunks[0]);
-    render_pug_and_details(f, app, main_chunks[1]);
+    render_inspector(f, app, main_chunks[1]);
     render_reclaim_progress(f, app, chunks[2]);
     render_status_bar(f, app, chunks[3]);
 
@@ -254,91 +254,6 @@ fn render_orphan_list(f: &mut Frame, app: &App, area: Rect) {
 
     let list = List::new(items).block(block);
     f.render_widget(list, area);
-}
-
-fn render_pug_and_details(f: &mut Frame, app: &App, area: Rect) {
-    if app.show_mascot {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(10), Constraint::Min(6)])
-            .split(area);
-
-        // Mascot: unmistakable ASCII dog sentry with floppy ears, paws, and curly tail
-        let anim_cycle = (app.animation_frame / 6) % 4;
-        let (head_line, snout_line, action) = match anim_cycle {
-            0 => (
-                "  V  (o) (o) V  ",
-                "   |   (Y)   |  ",
-                "Sniffing save vaults...",
-            ),
-            1 => ("  V  (^) (^) V  ", "   |   (▼)   |  ", "*sniff sniff*"),
-            2 => (
-                "  V  (•) (•) V  ",
-                "   |   (Y)   |  ",
-                "Digging up save candidates...",
-            ),
-            _ => (
-                "  V  (^) (^) V  ",
-                "   |   (w)   |  ",
-                "All saves accounted for.",
-            ),
-        };
-
-        let pug_art = vec![
-            Line::from(vec![
-                Span::styled("   /^-----^\\    ", Style::default().fg(COLOR_ACCENT)),
-                Span::styled(
-                    " PrefixPug Sentry",
-                    Style::default().fg(COLOR_TEXT).add_modifier(Modifier::BOLD),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled(
-                    head_line,
-                    Style::default()
-                        .fg(COLOR_ACCENT)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(format!(" {}", action), Style::default().fg(COLOR_MUTED)),
-            ]),
-            Line::from(vec![
-                Span::styled(snout_line, Style::default().fg(COLOR_ACCENT)),
-                Span::styled(
-                    " Vault: ~/.local/share/prefixpug/",
-                    Style::default().fg(COLOR_BORDER),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled("   /  \\===/  \\  ", Style::default().fg(COLOR_ACCENT)),
-                Span::styled(
-                    " Press [m] to hide mascot",
-                    Style::default().fg(COLOR_BORDER),
-                ),
-            ]),
-            Line::from(vec![Span::styled(
-                "  / /|     |\\ \\   @",
-                Style::default().fg(COLOR_ACCENT),
-            )]),
-            Line::from(vec![Span::styled(
-                " (_/ |_____| \\_) ( )",
-                Style::default().fg(COLOR_ACCENT),
-            )]),
-        ];
-
-        let pug_block = Block::default()
-            .title(" PrefixPug Sentry ")
-            .title_style(Style::default().fg(COLOR_ACCENT))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(COLOR_BORDER));
-
-        let pug_widget = Paragraph::new(pug_art).block(pug_block);
-        f.render_widget(pug_widget, chunks[0]);
-
-        render_inspector(f, app, chunks[1]);
-    } else {
-        render_inspector(f, app, area);
-    }
 }
 
 fn render_inspector(f: &mut Frame, app: &App, area: Rect) {
@@ -636,8 +551,6 @@ fn render_status_bar(f: &mut Frame, app: &App, area: Rect) {
         Span::styled("All ", Style::default().fg(COLOR_MUTED)),
         Span::styled("[s] ", Style::default().fg(COLOR_ACCENT)),
         Span::styled("Sort ", Style::default().fg(COLOR_MUTED)),
-        Span::styled("[m] ", Style::default().fg(COLOR_ACCENT)),
-        Span::styled("Mascot ", Style::default().fg(COLOR_MUTED)),
         Span::styled("[c] ", Style::default().fg(COLOR_WARN)),
         Span::styled("Clean ", Style::default().fg(COLOR_WARN)),
         Span::styled("[?] ", Style::default().fg(COLOR_SUCCESS)),
@@ -792,13 +705,6 @@ fn render_help_dialog(f: &mut Frame, area: Rect) {
             Span::styled("  s                ", Style::default().fg(COLOR_ACCENT)),
             Span::styled(
                 "Cycle sort: Size → Age → AppID",
-                Style::default().fg(COLOR_TEXT),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("  m                ", Style::default().fg(COLOR_ACCENT)),
-            Span::styled(
-                "Toggle PrefixPug mascot sentry",
                 Style::default().fg(COLOR_TEXT),
             ),
         ]),

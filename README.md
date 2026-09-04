@@ -69,7 +69,6 @@ PrefixPug includes an interactive terminal dashboard built with `ratatui`:
 | `a` | **Select All** | Batch select or deselect all visible deletable prefixes |
 | `i` | **Invert Selection** | Flip selection across visible prefixes |
 | `s` | **Cycle Sort Mode** | Sort by Size (descending), Age (oldest first), or AppID |
-| `m` | **Toggle Mascot** | Toggle between data-dense Inspector and PrefixPug Sentry |
 | `/` | **Search / Filter** | Filter by AppID or game title |
 | `c` | **Clean Selected** | Open the confirmation modal to vault saves and purge |
 | `?` / `h` | **Help Dialog** | Toggle control help dialog |
