@@ -529,7 +529,10 @@ pub fn validate_prefix_path_for_deletion(
         );
     }
 
-    let file_name = target_dir.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let file_name = target_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
     if file_name.is_empty() || !file_name.chars().all(|c| c.is_ascii_digit()) {
         bail!(
             "Safety violation: directory name '{}' in {:?} is not a numeric AppID",
@@ -548,12 +551,18 @@ pub fn validate_prefix_path_for_deletion(
         .with_context(|| format!("Failed to canonicalize directory {:?}", target_dir))?;
 
     if canonical == Path::new("/") || canonical == Path::new("/home") {
-        bail!("Safety violation: cannot delete root/system path {:?}", canonical);
+        bail!(
+            "Safety violation: cannot delete root/system path {:?}",
+            canonical
+        );
     }
 
     if let Some(home) = dirs::home_dir() {
         if canonical == home {
-            bail!("Safety violation: cannot delete home directory {:?}", canonical);
+            bail!(
+                "Safety violation: cannot delete home directory {:?}",
+                canonical
+            );
         }
     }
 
@@ -837,7 +846,10 @@ mod tests {
         let _ = fs::remove_dir_all(&temp_dir);
 
         // Real target directory
-        let real_target = temp_dir.join("real_storage").join("compatdata").join("12345");
+        let real_target = temp_dir
+            .join("real_storage")
+            .join("compatdata")
+            .join("12345");
         fs::create_dir_all(&real_target).unwrap();
         let sentinel_file = real_target.join("precious_game_data.bin");
         fs::write(&sentinel_file, b"DO_NOT_DELETE").unwrap();

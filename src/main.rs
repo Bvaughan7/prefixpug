@@ -318,7 +318,8 @@ fn run_clean_command(
                 if let Ok(meta) = std::fs::metadata(&sample_target) {
                     let dev = meta.dev();
                     fs_samples.entry(dev).or_insert_with(|| {
-                        let free = scanner::get_filesystem_available_space(&sample_target).unwrap_or(0);
+                        let free =
+                            scanner::get_filesystem_available_space(&sample_target).unwrap_or(0);
                         (sample_target.clone(), free)
                     });
                 }

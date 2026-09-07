@@ -432,14 +432,20 @@ pub fn restore_backup(
 
         // Prevent Tar Slip: entry path must be relative, not absolute, no '..' components
         if entry_path.is_absolute() {
-            bail!("Unsafe entry path in archive: absolute path {:?}", entry_path);
+            bail!(
+                "Unsafe entry path in archive: absolute path {:?}",
+                entry_path
+            );
         }
         for component in entry_path.components() {
             if matches!(
                 component,
                 std::path::Component::ParentDir | std::path::Component::RootDir
             ) {
-                bail!("Unsafe entry path in archive with traversal: {:?}", entry_path);
+                bail!(
+                    "Unsafe entry path in archive with traversal: {:?}",
+                    entry_path
+                );
             }
         }
 
@@ -584,11 +590,17 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             let dir_mode = fs::metadata(&archived).unwrap().permissions().mode() & 0o777;
             assert_eq!(dir_mode, 0o700, "vault directory mode must be 0700");
-            let manifest_mode =
-                fs::metadata(archived.join("manifest.json")).unwrap().permissions().mode() & 0o777;
+            let manifest_mode = fs::metadata(archived.join("manifest.json"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
             assert_eq!(manifest_mode, 0o600, "manifest mode must be 0600");
-            let archive_mode =
-                fs::metadata(archived.join("saves.tar.gz")).unwrap().permissions().mode() & 0o777;
+            let archive_mode = fs::metadata(archived.join("saves.tar.gz"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
             assert_eq!(archive_mode, 0o600, "archive mode must be 0600");
         }
 
@@ -656,7 +668,8 @@ mod tests {
                 original_path: "/tmp/evil_symlink".to_string(),
                 relative_path: "evil_symlink".to_string(),
                 size_bytes: 0,
-                sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string(),
+                sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                    .to_string(),
             }],
         };
         fs::write(
@@ -725,7 +738,8 @@ mod tests {
                 original_path: "/tmp/outside.txt".to_string(),
                 relative_path: "../outside.txt".to_string(),
                 size_bytes: 14,
-                sha256: "082cb4a66082417f38ba3d16272c207d2b3ef847c97d73b97ade456af05a7cbd".to_string(),
+                sha256: "082cb4a66082417f38ba3d16272c207d2b3ef847c97d73b97ade456af05a7cbd"
+                    .to_string(),
             }],
         };
         fs::write(
@@ -750,4 +764,3 @@ mod tests {
         let _ = fs::remove_dir_all(&temp_dir);
     }
 }
-

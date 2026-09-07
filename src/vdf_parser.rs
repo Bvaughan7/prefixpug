@@ -595,10 +595,7 @@ pub fn infer_title_from_compatdata(compatdata_dir: &Path) -> Option<String> {
                     && !line.contains("Microsoft")
                 {
                     let trimmed = line.trim_matches(|c| c == '[' || c == ']');
-                    let parts: Vec<&str> = trimmed
-                        .split('\\')
-                        .filter(|s| !s.is_empty())
-                        .collect();
+                    let parts: Vec<&str> = trimmed.split('\\').filter(|s| !s.is_empty()).collect();
                     if parts.len() >= 3 {
                         let candidate = parts[2].trim();
                         if !candidate.is_empty() && candidate != "Classes" {
@@ -842,7 +839,8 @@ mod tests {
         let _ = std::fs::create_dir_all(&pfx_dir);
 
         // Real Wine registry format has double backslashes
-        let reg = "[Software\\\\Bethesda\\\\Skyrim Special Edition]\n\"Installed\"=dword:00000001\n";
+        let reg =
+            "[Software\\\\Bethesda\\\\Skyrim Special Edition]\n\"Installed\"=dword:00000001\n";
         std::fs::write(pfx_dir.join("user.reg"), reg).unwrap();
 
         let title = infer_title_from_compatdata(&temp_dir);
@@ -871,8 +869,15 @@ mod tests {
         bytes.push(0x08);
 
         let res = parse_shortcuts_vdf_bytes(&bytes);
-        assert!(res.is_err(), "Deeply nested VDF should fail recursion limit");
+        assert!(
+            res.is_err(),
+            "Deeply nested VDF should fail recursion limit"
+        );
         let err = res.unwrap_err().to_string();
-        assert!(err.contains("recursion limit"), "Error should mention recursion limit: {}", err);
+        assert!(
+            err.contains("recursion limit"),
+            "Error should mention recursion limit: {}",
+            err
+        );
     }
 }
