@@ -190,7 +190,7 @@ pub fn get_filesystem_available_space(path: &Path) -> Result<u64> {
 // -----------------------------------------------------------------------------
 
 fn is_blocklisted_save_entry(path: &Path) -> bool {
-    let lower_path = path.to_string_lossy().to_lowercase();
+    let lower_path = path.to_string_lossy().replace('\\', "/").to_lowercase();
     let file_name = path
         .file_name()
         .and_then(|n| n.to_str())

@@ -69,6 +69,8 @@ pub const INFRASTRUCTURE_APPIDS: &[(&str, &str)] = &[
     ("1161040", "Proton BattlEye Runtime"),
     ("1113280", "Proton 5.9"),
     ("996510", "Steam Linux Runtime"),
+    ("3387570", "Steam Linux Runtime 4.0 (medic)"),
+    ("250820", "SteamVR"),
 ];
 
 pub fn get_infrastructure_name(appid: &str) -> Option<&'static str> {
@@ -136,6 +138,10 @@ pub fn default_library_vdf_path() -> Result<PathBuf> {
                 ".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/libraryfolders.vdf",
             ),
             home.join(".var/app/com.valvesoftware.Steam/data/Steam/steamapps/libraryfolders.vdf"),
+            // Snap Steam paths
+            home.join("snap/steam/common/.local/share/Steam/steamapps/libraryfolders.vdf"),
+            home.join("snap/steam/common/.steam/root/steamapps/libraryfolders.vdf"),
+            home.join("snap/steam/common/.steam/steam/steamapps/libraryfolders.vdf"),
             // Steam Deck specific paths
             PathBuf::from("/home/deck/.local/share/Steam/steamapps/libraryfolders.vdf"),
             PathBuf::from("/home/deck/.steam/root/steamapps/libraryfolders.vdf"),
@@ -593,17 +599,26 @@ pub fn infer_title_from_compatdata(compatdata_dir: &Path) -> Option<String> {
                 if line.starts_with("[Software\\")
                     && !line.contains("Wine")
                     && !line.contains("Microsoft")
+                    && !line.contains("Valve")
                 {
                     let trimmed = line.trim_matches(|c| c == '[' || c == ']');
                     let parts: Vec<&str> = trimmed.split('\\').filter(|s| !s.is_empty()).collect();
                     if parts.len() >= 3 {
                         let candidate = parts[2].trim();
-                        if !candidate.is_empty() && candidate != "Classes" {
+                        if !candidate.is_empty()
+                            && candidate != "Classes"
+                            && candidate != "Valve"
+                            && candidate != "Steam"
+                        {
                             return Some(candidate.to_string());
                         }
                     } else if parts.len() == 2 {
                         let candidate = parts[1].trim();
-                        if !candidate.is_empty() && candidate != "Classes" {
+                        if !candidate.is_empty()
+                            && candidate != "Classes"
+                            && candidate != "Valve"
+                            && candidate != "Steam"
+                        {
                             return Some(candidate.to_string());
                         }
                     }

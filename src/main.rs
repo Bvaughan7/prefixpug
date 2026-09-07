@@ -737,19 +737,18 @@ fn run_tui_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
 }
 
 fn run(cli: Cli) -> Result<i32> {
-    let vdf_path = match &cli.library_vdf {
-        Some(p) => p.clone(),
-        None => vdf_parser::default_library_vdf_path().context(
-            "Failed to locate Steam libraryfolders.vdf. Specify path using --library-vdf <PATH>",
-        )?,
-    };
+    // Subcommands independent of Steam VDF discovery
+    if let Some(Commands::Completions { shell }) = &cli.command {
+        let mut cmd = Cli::command();
+        clap_complete::generate(*shell, &mut cmd, "prefixpug", &mut std::io::stdout());
+        return Ok(0);
+    }
 
     let backup_dir = match &cli.backup_dir {
         Some(p) => p.clone(),
         None => backup::default_backup_root()?,
     };
 
-    // Subcommand dispatch (independent of library scanning)
     match &cli.command {
         Some(Commands::Backups) => {
             return run_backups_command(&backup_dir, cli.json);
@@ -760,17 +759,20 @@ fn run(cli: Cli) -> Result<i32> {
         Some(Commands::Restore { backup_id, target }) => {
             return run_restore_command(backup_id, &backup_dir, target.clone());
         }
-        Some(Commands::Completions { shell }) => {
-            let mut cmd = Cli::command();
-            clap_complete::generate(*shell, &mut cmd, "prefixpug", &mut std::io::stdout());
-            return Ok(0);
-        }
         _ => {}
     }
 
-    // P0-1: Parse all library folders and validate reachability
+    let vdf_path = match &cli.library_vdf {
+        Some(p) => p.clone(),
+        None => vdf_parser::default_library_vdf_path().context(
+            "Failed to locate Steam libraryfolders.vdf. Specify path using --library-vdf <PATH>",
+        )?,
+    };
+
+    // P0-1: Parse all library folders and validate reachability immediately
     let library_folders = vdf_parser::parse_library_folders(&vdf_path)
         .with_context(|| format!("Failed to parse library folders from {:?}", vdf_path))?;
+    vdf_parser::validate_libraries_reachable(&library_folders)?;
 
     // Collect steam roots for userdata / shortcuts.vdf discovery
     let mut steam_roots = Vec::new();
@@ -873,10 +875,14 @@ fn main() -> std::process::ExitCode {
         Err(err) => {
             let err_msg = format!("{:#}", err);
             eprintln!("\x1b[1;31mError:\x1b[0m {}", err_msg);
-            if err_msg.contains("Safety violation")
-                || err_msg.contains("Steam is currently running")
-                || err_msg.contains("Unmounted library")
-                || err_msg.contains("escapes outside")
+            let err_lower = err_msg.to_lowercase();
+            if err_lower.contains("safety violation")
+                || err_lower.contains("actively running")
+                || err_lower.contains("currently running")
+                || err_lower.contains("unmounted")
+                || err_lower.contains("unreachable")
+                || err_lower.contains("escapes outside")
+                || err_lower.contains("locked by an active process")
             {
                 std::process::ExitCode::from(2)
             } else {

@@ -4,6 +4,25 @@ All notable changes to **PrefixPug** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Beginner-Friendly Documentation & ELI5 Guides:** Comprehensive "Explain It Like I'm 5" breakdown and 30-second quickstart in `README.md` and GitHub Pages site (`web/index.html`) explaining prefixes, storage leaks, and save preservation.
+- **Snap Steam Auto-Discovery:** Added standard Ubuntu Snap Steam candidate paths (`~/snap/steam/common/...`) to `default_library_vdf_path()`.
+- **Expanded Infrastructure Protection:** Added Steam Linux Runtime 4.0 (medic, `3387570`) and SteamVR (`250820`) to the permanent runtime deny-list.
+
+### Fixed
+- **CLI Subcommand Decoupling:** Standalone commands (`completions`, `backups`, `verify-backup`, `restore`) no longer require `libraryfolders.vdf` to exist, allowing them to run cleanly in chroot packaging environments or server installs.
+- **Structured Exit Code 2 Reliability:** Normalized error matching to case-insensitive inspection across unmounted drives, unreachable libraries, active Steam processes, and held `pfx.lock` files.
+- **Wine Registry Title Inference:** Filtered out Valve and Steam client registry stubs from falsely becoming inferred game titles.
+- **Save Blocklist Path Normalization:** Normalized backslashes to forward slashes before substring matching on excluded paths.
+- **Manpage Flags & Keybindings:** Corrected CLI options (`--library-vdf`, `--skip-backup`, `--ignore-running-steam`) and added missing keybindings (`/`, `?`/`h`, `i`) in `man/prefixpug.1`.
+
+### Removed
+- **Obsolete Scratch Code:** Removed deprecated `examples/generate_frames.rs` test snippet.
+
+---
+
 ## [0.2.1] - 2026-09-03
 
 ### Added
