@@ -103,7 +103,12 @@ pub fn backup_orphan_saves(orphan: &OrphanedPrefix, backup_root: &Path) -> Resul
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&target_dir, fs::Permissions::from_mode(0o700));
+        if let Err(e) = fs::set_permissions(&target_dir, fs::Permissions::from_mode(0o700)) {
+            eprintln!(
+                "Warning: Failed to set 0700 permissions on backup dir {:?}: {}",
+                target_dir, e
+            );
+        }
     }
 
     let archive_name = "saves.tar.gz".to_string();
@@ -153,7 +158,12 @@ pub fn backup_orphan_saves(orphan: &OrphanedPrefix, backup_root: &Path) -> Resul
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&archive_path, fs::Permissions::from_mode(0o600));
+            if let Err(e) = fs::set_permissions(&archive_path, fs::Permissions::from_mode(0o600)) {
+                eprintln!(
+                    "Warning: Failed to set 0600 permissions on archive {:?}: {}",
+                    archive_path, e
+                );
+            }
         }
     }
 
@@ -202,7 +212,12 @@ pub fn backup_orphan_saves(orphan: &OrphanedPrefix, backup_root: &Path) -> Resul
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o600));
+        if let Err(e) = fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o600)) {
+            eprintln!(
+                "Warning: Failed to set 0600 permissions on manifest {:?}: {}",
+                manifest_path, e
+            );
+        }
     }
 
     Ok(Some(target_dir))
@@ -404,6 +419,8 @@ pub fn restore_backup(
     if !archive_path.is_file() {
         bail!("Archive file {:?} not found", archive_path);
     }
+
+    fs::create_dir_all(target_dir)?;
 
     let tar_gz = File::open(&archive_path)?;
     let tar = flate2::read::GzDecoder::new(tar_gz);
@@ -663,4 +680,74 @@ mod tests {
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
+
+    #[test]
+    fn test_restore_rejects_path_traversal_entries() {
+        let temp_dir = std::env::temp_dir().join("prefixpug_test_restore_traversal");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let vault_root = temp_dir.join("vault");
+        let backup_dir = vault_root.join("888_12345");
+        fs::create_dir_all(&backup_dir).unwrap();
+
+        // Build tar containing a traversal path entry '../outside.txt'
+        let archive_file = backup_dir.join("saves.tar.gz");
+        {
+            let file = File::create(&archive_file).unwrap();
+            let enc = GzEncoder::new(file, Compression::default());
+            let mut tar = Builder::new(enc);
+
+            let payload = b"traversal data";
+            let mut header = tar::Header::new_gnu();
+            header.set_size(payload.len() as u64);
+            header.set_mode(0o644);
+            let name_bytes = b"../outside.txt";
+            header.as_mut_bytes()[..name_bytes.len()].copy_from_slice(name_bytes);
+            header.set_cksum();
+            tar.append(&header, &payload[..]).unwrap();
+            let mut enc = tar.into_inner().unwrap();
+            enc.flush().unwrap();
+            enc.finish().unwrap();
+        }
+
+        let sha256 = compute_file_sha256(&archive_file).unwrap();
+        let manifest = BackupManifest {
+            appid: "888".to_string(),
+            title: Some("Traversal Test".to_string()),
+            timestamp: 12345,
+            total_save_size: 14,
+            tool_version: "0.2.1".to_string(),
+            archive_file: "saves.tar.gz".to_string(),
+            archive_sha256: sha256,
+            warnings: vec![],
+            files: vec![BackupEntry {
+                original_path: "/tmp/outside.txt".to_string(),
+                relative_path: "../outside.txt".to_string(),
+                size_bytes: 14,
+                sha256: "082cb4a66082417f38ba3d16272c207d2b3ef847c97d73b97ade456af05a7cbd".to_string(),
+            }],
+        };
+        fs::write(
+            backup_dir.join("manifest.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let restore_dest = temp_dir.join("restored");
+        let res = restore_backup(&backup_dir.to_string_lossy(), &vault_root, &restore_dest);
+        assert!(
+            res.is_err(),
+            "Restore must reject archives containing parent directory traversal (..)!"
+        );
+        let err_msg = res.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("traversal") || err_msg.contains("Unsafe"),
+            "Error message should mention traversal: {}",
+            err_msg
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }
+
