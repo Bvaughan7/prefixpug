@@ -480,50 +480,53 @@ pub fn validate_prefix_path_for_deletion(
     target_dir: &Path,
     expected_parent_name: &str,
 ) -> Result<PathBuf> {
-    let canonical = target_dir
-        .canonicalize()
-        .with_context(|| format!("Failed to canonicalize directory {:?}", target_dir))?;
+    let symlink_meta = fs::symlink_metadata(target_dir)
+        .with_context(|| format!("Failed to inspect target path {:?}", target_dir))?;
 
-    let parent = canonical
+    // Check lexical parent
+    let parent = target_dir
         .parent()
-        .ok_or_else(|| anyhow::anyhow!("Directory {:?} has no parent", canonical))?;
+        .ok_or_else(|| anyhow::anyhow!("Directory {:?} has no parent", target_dir))?;
 
     let parent_name = parent.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if parent_name != expected_parent_name {
         bail!(
             "Safety violation: directory {:?} is not a child of '{}' (actual parent: '{}')",
-            canonical,
+            target_dir,
             expected_parent_name,
             parent_name
         );
     }
 
-    if canonical == Path::new("/") || canonical == Path::new("/home") {
+    let file_name = target_dir.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if file_name.is_empty() || !file_name.chars().all(|c| c.is_ascii_digit()) {
         bail!(
-            "Safety violation: cannot delete root/system path {:?}",
-            canonical
+            "Safety violation: directory name '{}' in {:?} is not a numeric AppID",
+            file_name,
+            target_dir
         );
+    }
+
+    if symlink_meta.file_type().is_symlink() {
+        // If the path itself is a symlink, return target_dir so safe_delete_prefix_directory unlinks the symlink
+        return Ok(target_dir.to_path_buf());
+    }
+
+    let canonical = target_dir
+        .canonicalize()
+        .with_context(|| format!("Failed to canonicalize directory {:?}", target_dir))?;
+
+    if canonical == Path::new("/") || canonical == Path::new("/home") {
+        bail!("Safety violation: cannot delete root/system path {:?}", canonical);
     }
 
     if let Some(home) = dirs::home_dir() {
         if canonical == home {
-            bail!(
-                "Safety violation: cannot delete home directory {:?}",
-                canonical
-            );
+            bail!("Safety violation: cannot delete home directory {:?}", canonical);
         }
     }
 
-    let file_name = canonical.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    if !file_name.chars().all(|c| c.is_ascii_digit()) {
-        bail!(
-            "Safety violation: directory name '{}' in {:?} is not a numeric AppID",
-            file_name,
-            canonical
-        );
-    }
-
-    Ok(canonical)
+    Ok(target_dir.to_path_buf())
 }
 
 /// Safely removes a directory without following symlinks.
@@ -793,6 +796,39 @@ mod tests {
         let bad_name = compat_dir.join("not_numeric");
         let _ = fs::create_dir_all(&bad_name);
         assert!(validate_prefix_path_for_deletion(&bad_name, "compatdata").is_err());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_delete_symlinked_prefix_only_removes_symlink_not_target() {
+        let temp_dir = std::env::temp_dir().join("prefixpug_test_symlink_del_target");
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        // Real target directory
+        let real_target = temp_dir.join("real_storage").join("compatdata").join("12345");
+        fs::create_dir_all(&real_target).unwrap();
+        let sentinel_file = real_target.join("precious_game_data.bin");
+        fs::write(&sentinel_file, b"DO_NOT_DELETE").unwrap();
+
+        // Symlink in steam library
+        let steamapps_compat = temp_dir.join("steamapps").join("compatdata");
+        fs::create_dir_all(&steamapps_compat).unwrap();
+        let symlink_prefix = steamapps_compat.join("12345");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&real_target, &symlink_prefix).unwrap();
+
+        // Validate and delete
+        let validated = validate_prefix_path_for_deletion(&symlink_prefix, "compatdata").unwrap();
+        safe_delete_prefix_directory(&validated).unwrap();
+
+        // Symlink must be gone
+        assert!(!symlink_prefix.exists());
+        assert!(fs::symlink_metadata(&symlink_prefix).is_err());
+
+        // Target must SURVIVE!
+        assert!(real_target.exists(), "Target directory was destroyed!");
+        assert!(sentinel_file.exists(), "Target files were destroyed!");
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
