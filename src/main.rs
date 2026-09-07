@@ -703,6 +703,14 @@ fn run(cli: Cli) -> Result<i32> {
     if let Some(parent) = vdf_path.parent().and_then(|p| p.parent()) {
         steam_roots.push(parent.to_path_buf());
     }
+    if let Some(home) = dirs::home_dir() {
+        steam_roots.push(home.join(".steam/root"));
+        steam_roots.push(home.join(".steam/steam"));
+        steam_roots.push(home.join(".local/share/Steam"));
+        steam_roots.push(home.join(".var/app/com.valvesoftware.Steam/.steam/root"));
+        steam_roots.push(home.join(".var/app/com.valvesoftware.Steam/.steam/steam"));
+        steam_roots.push(home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"));
+    }
 
     // P0-2: Discover non-Steam shortcuts across all user profiles
     let protected_shortcuts = vdf_parser::discover_non_steam_shortcuts(&steam_roots)?;

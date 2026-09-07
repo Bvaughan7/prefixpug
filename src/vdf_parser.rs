@@ -473,7 +473,16 @@ pub fn parse_shortcuts_vdf_bytes(bytes: &[u8]) -> Result<Vec<NonSteamShortcut>> 
             String::new()
         };
 
-        if let Some(id) = appid {
+        // Fallback for legacy shortcuts: compute AppID from CRC if missing
+        let resolved_appid = appid.or_else(|| {
+            if !computed_crc.is_empty() {
+                computed_crc.parse::<u32>().ok()
+            } else {
+                None
+            }
+        });
+
+        if let Some(id) = resolved_appid {
             shortcuts.push(NonSteamShortcut {
                 appid: id,
                 app_name,
@@ -721,6 +730,32 @@ mod tests {
         assert_eq!(shortcuts[0].appid, 3060000000);
         assert_eq!(shortcuts[0].app_name, "Battle.net");
         assert!(!shortcuts[0].computed_compatdata_id.is_empty());
+    }
+
+    #[test]
+    fn test_parse_legacy_shortcuts_without_explicit_appid() {
+        let mut bytes = Vec::new();
+        bytes.push(0x00);
+        bytes.extend_from_slice(b"shortcuts\0");
+
+        bytes.push(0x00);
+        bytes.extend_from_slice(b"0\0");
+
+        // Notice: NO 0x02 appid field! Only AppName and Exe (legacy format)
+        bytes.push(0x01);
+        bytes.extend_from_slice(b"AppName\0GOG Galaxy\0");
+
+        bytes.push(0x01);
+        bytes.extend_from_slice(b"Exe\0\"C:\\GOG Galaxy\\GalaxyClient.exe\"\0");
+
+        bytes.push(0x08);
+        bytes.push(0x08);
+
+        let shortcuts = parse_shortcuts_vdf_bytes(&bytes).expect("parse legacy shortcuts");
+        assert_eq!(shortcuts.len(), 1);
+        assert_eq!(shortcuts[0].app_name, "GOG Galaxy");
+        assert!(!shortcuts[0].computed_compatdata_id.is_empty());
+        assert_ne!(shortcuts[0].appid, 0);
     }
 
     #[test]
