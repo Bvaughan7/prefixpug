@@ -473,6 +473,34 @@ pub fn ensure_steam_not_running(allow_running_steam: bool) -> Result<()> {
     Ok(())
 }
 
+/// Checks if a Wine/Proton prefix is currently locked by a running process using pfx.lock.
+pub fn is_prefix_locked(compatdata_path: &Path) -> bool {
+    let candidates = [
+        compatdata_path.join("pfx.lock"),
+        compatdata_path.join("pfx").join("pfx.lock"),
+    ];
+
+    for lock_path in &candidates {
+        if lock_path.is_file() {
+            // Test non-blocking exclusive flock
+            if let Ok(file) = std::fs::File::open(lock_path) {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::io::AsRawFd;
+                    let fd = file.as_raw_fd();
+                    let res = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+                    if res != 0 {
+                        return true; // Lock is currently held by active process
+                    }
+                    // Release test lock
+                    unsafe { libc::flock(fd, libc::LOCK_UN) };
+                }
+            }
+        }
+    }
+    false
+}
+
 // -----------------------------------------------------------------------------
 // P0-5: Path Traversal and Safe Deletion Guards
 // -----------------------------------------------------------------------------
@@ -939,6 +967,37 @@ mod tests {
             usage.allocated_bytes, 0,
             "Allocated bytes must be 0 for symlink in prefix"
         );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_is_prefix_locked() {
+        let temp_dir = std::env::temp_dir().join("prefixpug_test_pfx_lock");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        assert!(!is_prefix_locked(&temp_dir));
+
+        let lock_path = temp_dir.join("pfx.lock");
+        fs::write(&lock_path, b"").unwrap();
+        assert!(!is_prefix_locked(&temp_dir));
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            let file = std::fs::File::open(&lock_path).unwrap();
+            let fd = file.as_raw_fd();
+            let flock_res = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+            assert_eq!(flock_res, 0);
+
+            // Now lock is held, is_prefix_locked should return true
+            assert!(is_prefix_locked(&temp_dir));
+
+            // Release lock
+            unsafe { libc::flock(fd, libc::LOCK_UN) };
+            assert!(!is_prefix_locked(&temp_dir));
+        }
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

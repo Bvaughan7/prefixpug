@@ -9,6 +9,7 @@ use crossterm::{
 };
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
+use std::collections::{HashMap, HashSet};
 use std::io::{stdin, stdout, IsTerminal, Stdout, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -68,6 +69,12 @@ fn execute_clean(
     if !shaders_only {
         if let Some(compat_path) = &orphan.compatdata_path {
             if compat_path.exists() {
+                if scanner::is_prefix_locked(compat_path) {
+                    bail!(
+                        "Prefix is currently locked by an active process at {:?}",
+                        compat_path
+                    );
+                }
                 // P0-5: Validate path safety
                 let validated_compat =
                     scanner::validate_prefix_path_for_deletion(compat_path, "compatdata")?;
@@ -288,14 +295,42 @@ fn run_clean_command(
     // P0-6: Enforce Steam concurrency check before destructive changes
     scanner::ensure_steam_not_running(cli.ignore_running_steam)?;
 
-    // Measure available space before purge (P1-1 statvfs)
-    let sample_path = targets[0]
-        .compatdata_path
-        .as_ref()
-        .or(targets[0].shadercache_path.as_ref())
-        .map(|p| p.as_path())
-        .unwrap_or_else(|| Path::new("/"));
-    let free_before = scanner::get_filesystem_available_space(sample_path).unwrap_or(0);
+    // Measure available space before purge (grouped across distinct filesystems/devices)
+    let mut fs_samples: HashMap<u64, (PathBuf, u64)> = HashMap::new();
+    for t in &targets {
+        let candidate_paths = [t.compatdata_path.as_deref(), t.shadercache_path.as_deref()];
+        for maybe_path in candidate_paths.into_iter().flatten() {
+            let sample_target = if maybe_path.exists() {
+                maybe_path.to_path_buf()
+            } else if let Some(parent) = maybe_path.parent() {
+                if parent.exists() {
+                    parent.to_path_buf()
+                } else {
+                    PathBuf::from("/")
+                }
+            } else {
+                PathBuf::from("/")
+            };
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                if let Ok(meta) = std::fs::metadata(&sample_target) {
+                    let dev = meta.dev();
+                    fs_samples.entry(dev).or_insert_with(|| {
+                        let free = scanner::get_filesystem_available_space(&sample_target).unwrap_or(0);
+                        (sample_target.clone(), free)
+                    });
+                }
+            }
+        }
+    }
+
+    if fs_samples.is_empty() {
+        let root = PathBuf::from("/");
+        let free = scanner::get_filesystem_available_space(&root).unwrap_or(0);
+        fs_samples.insert(0, (root, free));
+    }
 
     println!("Purging orphaned prefixes...");
     for t in &targets {
@@ -303,8 +338,11 @@ fn run_clean_command(
         println!("  ✓ Cleaned AppID {}", t.appid);
     }
 
-    let free_after = scanner::get_filesystem_available_space(sample_path).unwrap_or(0);
-    let measured_delta = free_after.saturating_sub(free_before);
+    let mut measured_delta = 0u64;
+    for (path, free_before) in fs_samples.values() {
+        let free_after = scanner::get_filesystem_available_space(path).unwrap_or(*free_before);
+        measured_delta += free_after.saturating_sub(*free_before);
+    }
 
     if measured_delta > 0 {
         println!(
@@ -521,18 +559,38 @@ fn run_vault_command(
     }
 }
 
+struct TerminalGuard;
+
+impl TerminalGuard {
+    fn new() -> Result<Self> {
+        enable_raw_mode().context("Failed to enable terminal raw mode")?;
+        execute!(stdout(), EnterAlternateScreen).context("Failed to enter alternate screen")?;
+
+        let default_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let _ = disable_raw_mode();
+            let _ = execute!(stdout(), LeaveAlternateScreen);
+            default_hook(info);
+        }));
+
+        Ok(TerminalGuard)
+    }
+}
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = execute!(stdout(), LeaveAlternateScreen);
+    }
+}
+
 fn run_tui(mut app: App) -> Result<i32> {
-    enable_raw_mode().context("Failed to enable terminal raw mode")?;
-    let mut stdout = stdout();
-    execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
-    let backend = CrosstermBackend::new(stdout);
+    let _guard = TerminalGuard::new()?;
+    let backend = CrosstermBackend::new(stdout());
     let mut terminal = Terminal::new(backend).context("Failed to initialize ratatui terminal")?;
 
     let res = run_tui_loop(&mut terminal, &mut app);
-
-    disable_raw_mode().ok();
-    execute!(terminal.backend_mut(), LeaveAlternateScreen).ok();
-    terminal.show_cursor().ok();
+    let _ = terminal.show_cursor();
 
     res.map(|_| 0)
 }
@@ -605,6 +663,9 @@ fn run_tui_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
                                 }
 
                                 let mut reclaimed = 0;
+                                let mut success_ids = HashSet::new();
+                                let mut failed_ids = Vec::new();
+
                                 let targets: Vec<OrphanedPrefix> = app
                                     .all_orphans
                                     .iter()
@@ -613,22 +674,37 @@ fn run_tui_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App
                                     .collect();
 
                                 for t in &targets {
-                                    if let Ok(bytes) =
-                                        execute_clean(t, &app.backup_dir, false, false)
-                                    {
-                                        reclaimed += bytes;
+                                    match execute_clean(t, &app.backup_dir, false, false) {
+                                        Ok(bytes) => {
+                                            reclaimed += bytes;
+                                            success_ids.insert(t.appid.clone());
+                                        }
+                                        Err(e) => {
+                                            failed_ids.push((t.appid.clone(), e.to_string()));
+                                        }
                                     }
                                 }
 
                                 app.space_reclaimed += reclaimed;
-                                app.status_message = format!(
-                                    "Purged {} prefix(es). Reclaimed {}!",
-                                    targets.len(),
-                                    format_bytes(reclaimed)
-                                );
-                                app.all_orphans
-                                    .retain(|o| !app.selected_appids.contains(&o.appid));
-                                app.selected_appids.clear();
+                                if failed_ids.is_empty() {
+                                    app.status_message = format!(
+                                        "Purged {} prefix(es). Reclaimed {}!",
+                                        success_ids.len(),
+                                        format_bytes(reclaimed)
+                                    );
+                                } else {
+                                    app.status_message = format!(
+                                        "Purged {} prefix(es) ({} failed). Reclaimed {}.",
+                                        success_ids.len(),
+                                        failed_ids.len(),
+                                        format_bytes(reclaimed)
+                                    );
+                                }
+
+                                app.all_orphans.retain(|o| !success_ids.contains(&o.appid));
+                                for id in &success_ids {
+                                    app.selected_appids.remove(id);
+                                }
                                 app.apply_filter();
                                 app.state = AppState::Done;
                             }
