@@ -340,9 +340,7 @@ fn read_null_terminated_string(bytes: &[u8], cursor: &mut usize) -> Result<Strin
     if *cursor >= bytes.len() {
         bail!("Unexpected EOF reading null-terminated string in binary VDF");
     }
-    let s = std::str::from_utf8(&bytes[start..*cursor])
-        .context("Invalid UTF-8 in binary VDF string")?
-        .to_string();
+    let s = String::from_utf8_lossy(&bytes[start..*cursor]).into_owned();
     *cursor += 1; // Consume null byte
     Ok(s)
 }
@@ -410,7 +408,7 @@ pub fn parse_shortcuts_vdf_bytes(bytes: &[u8]) -> Result<Vec<NonSteamShortcut>> 
             match field_type {
                 0x00 => {
                     // Nested sub-object (tags, etc.) - skip recursively
-                    skip_binary_vdf_subobject(bytes, &mut cursor)?;
+                    skip_binary_vdf_subobject(bytes, &mut cursor, 1)?;
                 }
                 0x01 => {
                     // String field
@@ -495,7 +493,10 @@ pub fn parse_shortcuts_vdf_bytes(bytes: &[u8]) -> Result<Vec<NonSteamShortcut>> 
     Ok(shortcuts)
 }
 
-fn skip_binary_vdf_subobject(bytes: &[u8], cursor: &mut usize) -> Result<()> {
+fn skip_binary_vdf_subobject(bytes: &[u8], cursor: &mut usize, depth: usize) -> Result<()> {
+    if depth > 64 {
+        bail!("VDF sub-object nesting exceeded maximum recursion limit (64)");
+    }
     while *cursor < bytes.len() {
         let field_type = bytes[*cursor];
         *cursor += 1;
@@ -504,7 +505,7 @@ fn skip_binary_vdf_subobject(bytes: &[u8], cursor: &mut usize) -> Result<()> {
         }
         let _key = read_null_terminated_string(bytes, cursor)?;
         match field_type {
-            0x00 => skip_binary_vdf_subobject(bytes, cursor)?,
+            0x00 => skip_binary_vdf_subobject(bytes, cursor, depth + 1)?,
             0x01 => {
                 let _val = read_null_terminated_string(bytes, cursor)?;
             }
@@ -594,9 +595,17 @@ pub fn infer_title_from_compatdata(compatdata_dir: &Path) -> Option<String> {
                     && !line.contains("Microsoft")
                 {
                     let trimmed = line.trim_matches(|c| c == '[' || c == ']');
-                    let parts: Vec<&str> = trimmed.split('\\').collect();
+                    let parts: Vec<&str> = trimmed
+                        .split('\\')
+                        .filter(|s| !s.is_empty())
+                        .collect();
                     if parts.len() >= 3 {
                         let candidate = parts[2].trim();
+                        if !candidate.is_empty() && candidate != "Classes" {
+                            return Some(candidate.to_string());
+                        }
+                    } else if parts.len() == 2 {
+                        let candidate = parts[1].trim();
                         if !candidate.is_empty() && candidate != "Classes" {
                             return Some(candidate.to_string());
                         }
@@ -798,5 +807,72 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&temp_steam);
+    }
+
+    #[test]
+    fn test_non_utf8_binary_vdf_does_not_abort() {
+        let mut bytes = Vec::new();
+        bytes.push(0x00);
+        bytes.extend_from_slice(b"shortcuts\0");
+        bytes.push(0x00);
+        bytes.extend_from_slice(b"0\0");
+        bytes.push(0x02);
+        bytes.extend_from_slice(b"appid\0");
+        bytes.extend_from_slice(&12345u32.to_le_bytes());
+        bytes.push(0x01);
+        bytes.extend_from_slice(b"AppName\0");
+        // Non-UTF-8 Latin-1 byte sequence: Pok\xe9mon
+        bytes.extend_from_slice(b"Pok\xe9mon\0");
+        bytes.push(0x01);
+        bytes.extend_from_slice(b"Exe\0game.exe\0");
+        bytes.push(0x08);
+        bytes.push(0x08);
+
+        let res = parse_shortcuts_vdf_bytes(&bytes);
+        assert!(res.is_ok(), "Failed to parse non-UTF8 shortcut string");
+        let sc = res.unwrap();
+        assert_eq!(sc.len(), 1);
+        assert!(sc[0].app_name.contains("Pok"));
+    }
+
+    #[test]
+    fn test_infer_title_handles_wine_escaped_backslashes() {
+        let temp_dir = std::env::temp_dir().join("prefixpug_test_wine_reg_slashes");
+        let pfx_dir = temp_dir.join("pfx");
+        let _ = std::fs::create_dir_all(&pfx_dir);
+
+        // Real Wine registry format has double backslashes
+        let reg = "[Software\\\\Bethesda\\\\Skyrim Special Edition]\n\"Installed\"=dword:00000001\n";
+        std::fs::write(pfx_dir.join("user.reg"), reg).unwrap();
+
+        let title = infer_title_from_compatdata(&temp_dir);
+        assert_eq!(title.as_deref(), Some("Skyrim Special Edition"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_skip_binary_vdf_recursion_limit() {
+        let mut bytes = Vec::new();
+        bytes.push(0x00);
+        bytes.extend_from_slice(b"shortcuts\0");
+        bytes.push(0x00);
+        bytes.extend_from_slice(b"0\0");
+        // Add an unknown subobject nested 70 times
+        bytes.push(0x00);
+        bytes.extend_from_slice(b"nested_subobject\0");
+        for _ in 0..70 {
+            bytes.push(0x00);
+            bytes.extend_from_slice(b"sub\0");
+        }
+        bytes.extend(std::iter::repeat_n(0x08, 70));
+        bytes.push(0x08);
+        bytes.push(0x08);
+        bytes.push(0x08);
+
+        let res = parse_shortcuts_vdf_bytes(&bytes);
+        assert!(res.is_err(), "Deeply nested VDF should fail recursion limit");
+        let err = res.unwrap_err().to_string();
+        assert!(err.contains("recursion limit"), "Error should mention recursion limit: {}", err);
     }
 }
