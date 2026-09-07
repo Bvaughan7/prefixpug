@@ -302,11 +302,27 @@ pub fn sniff_save_files(compatdata_dir: &Path, warnings: &mut Vec<String>) -> Ve
             continue;
         }
 
+        // Check if candidate directory itself is a symlink or escapes prefix
+        if let Ok(meta) = fs::symlink_metadata(&dir) {
+            if meta.file_type().is_symlink() {
+                if let Ok(canon_dir) = dir.canonicalize() {
+                    if !canon_dir.starts_with(&canonical_compat) {
+                        warnings.push(format!(
+                            "Directory {:?} is a symlink pointing outside prefix ({:?}); skipped for safety.",
+                            dir, canon_dir
+                        ));
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+            }
+        }
+
         // P0-5: Never follow symlinks
         for entry in WalkDir::new(&dir).follow_links(false).into_iter().flatten() {
             let path = entry.path();
 
-            // Check if this entry is a symlink
             if entry.path_is_symlink() {
                 if let Ok(target) = fs::read_link(path) {
                     let target_canonical = if target.is_relative() {
@@ -325,9 +341,22 @@ pub fn sniff_save_files(compatdata_dir: &Path, warnings: &mut Vec<String>) -> Ve
                         }
                     }
                 }
+                continue;
             }
 
             if entry.file_type().is_file() {
+                if let Ok(canon_file) = path.canonicalize() {
+                    if !canon_file.starts_with(&canonical_compat) {
+                        warnings.push(format!(
+                            "File {:?} resolves outside prefix ({:?}); skipped for safety.",
+                            path, canon_file
+                        ));
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+
                 if is_blocklisted_save_entry(path) {
                     continue;
                 }
@@ -800,5 +829,48 @@ mod tests {
 
         let _ = fs::remove_dir_all(&temp_dir);
         let _ = fs::remove_dir_all(&sentinel_dir);
+    }
+
+    #[test]
+    fn test_symlinked_documents_folder_escaping_prefix_is_not_sniffed() {
+        let temp_dir = std::env::temp_dir().join("prefixpug_test_symlink_dir_escape");
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        let outside_dir = std::env::temp_dir().join("prefixpug_outside_user_docs");
+        let _ = fs::remove_dir_all(&outside_dir);
+        fs::create_dir_all(&outside_dir).unwrap();
+        fs::write(
+            outside_dir.join("personal_tax_record.txt"),
+            b"sensitive personal data",
+        )
+        .unwrap();
+
+        let steamuser_dir = temp_dir
+            .join("pfx")
+            .join("drive_c")
+            .join("users")
+            .join("steamuser");
+        fs::create_dir_all(&steamuser_dir).unwrap();
+
+        // Symlink Documents to outside_dir (standard Wine desktop integration behavior)
+        let documents_link = steamuser_dir.join("Documents");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&outside_dir, &documents_link).unwrap();
+
+        let mut warnings = Vec::new();
+        let saves = sniff_save_files(&temp_dir, &mut warnings);
+
+        // Crucial safety assertion: NO file from outside_dir can be collected
+        for s in &saves {
+            assert!(
+                !s.path.starts_with(&documents_link) && !s.path.starts_with(&outside_dir),
+                "External host file {:?} was collected by save sniffer!",
+                s.path
+            );
+        }
+        assert!(warnings.iter().any(|w| w.contains("outside prefix")));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::remove_dir_all(&outside_dir);
     }
 }
