@@ -138,6 +138,9 @@ pub fn calculate_directory_usage(path: &Path) -> (DiskUsage, Option<SystemTime>)
     let mut newest_mtime: Option<SystemTime> = None;
 
     for entry in WalkDir::new(path).follow_links(false).into_iter().flatten() {
+        if entry.path_is_symlink() {
+            continue;
+        }
         if let Ok(meta) = entry.metadata() {
             if meta.is_file() {
                 let apparent = meta.len();
@@ -908,5 +911,35 @@ mod tests {
 
         let _ = fs::remove_dir_all(&temp_dir);
         let _ = fs::remove_dir_all(&outside_dir);
+    }
+
+    #[test]
+    fn test_calculate_directory_usage_skips_symlinks() {
+        let temp_dir = std::env::temp_dir().join("prefixpug_test_symlink_usage");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let target_dir = temp_dir.join("target");
+        fs::create_dir_all(&target_dir).unwrap();
+        let large_file = target_dir.join("large.bin");
+        fs::write(&large_file, vec![0xAB; 1024 * 1024]).unwrap();
+
+        let prefix_dir = temp_dir.join("prefix");
+        fs::create_dir_all(&prefix_dir).unwrap();
+        let link_path = prefix_dir.join("link_to_large");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&large_file, &link_path).unwrap();
+
+        let (usage, _) = calculate_directory_usage(&prefix_dir);
+        assert_eq!(
+            usage.apparent_bytes, 0,
+            "Apparent bytes must be 0 for symlink in prefix"
+        );
+        assert_eq!(
+            usage.allocated_bytes, 0,
+            "Allocated bytes must be 0 for symlink in prefix"
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

@@ -100,6 +100,12 @@ pub fn backup_orphan_saves(orphan: &OrphanedPrefix, backup_root: &Path) -> Resul
     fs::create_dir_all(&target_dir)
         .with_context(|| format!("Failed to create backup directory at {:?}", target_dir))?;
 
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&target_dir, fs::Permissions::from_mode(0o700));
+    }
+
     let archive_name = "saves.tar.gz".to_string();
     let archive_path = target_dir.join(&archive_name);
 
@@ -144,6 +150,11 @@ pub fn backup_orphan_saves(orphan: &OrphanedPrefix, backup_root: &Path) -> Resul
         let file = enc.finish().context("Failed to finish gzip compression")?;
         // P1-5: fsync archive before proceeding
         file.sync_all().context("Failed to fsync archive file")?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&archive_path, fs::Permissions::from_mode(0o600));
+        }
     }
 
     // 2. Compute archive SHA-256
@@ -188,6 +199,11 @@ pub fn backup_orphan_saves(orphan: &OrphanedPrefix, backup_root: &Path) -> Resul
     let mut manifest_file = File::create(&manifest_path)?;
     manifest_file.write_all(manifest_json.as_bytes())?;
     manifest_file.sync_all()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o600));
+    }
 
     Ok(Some(target_dir))
 }
@@ -370,11 +386,17 @@ pub fn restore_backup(
         bail!("Backup directory not found at {:?}", backup_dir);
     }
 
-    let manifest_path = backup_dir.join("manifest.json");
-    if !manifest_path.is_file() {
-        bail!("Missing manifest.json in backup directory {:?}", backup_dir);
+    // 1. Verify backup integrity before unpacking
+    let report = verify_backup(backup_id_or_path, backup_root)
+        .with_context(|| format!("Failed to verify backup at {:?}", backup_dir))?;
+    if !report.is_valid {
+        bail!(
+            "Backup integrity verification failed: {}",
+            report.errors.join("; ")
+        );
     }
 
+    let manifest_path = backup_dir.join("manifest.json");
     let content = fs::read_to_string(&manifest_path)?;
     let manifest: BackupManifest = serde_json::from_str(&content)?;
 
@@ -383,14 +405,44 @@ pub fn restore_backup(
         bail!("Archive file {:?} not found", archive_path);
     }
 
-    fs::create_dir_all(target_dir)?;
-
     let tar_gz = File::open(&archive_path)?;
     let tar = flate2::read::GzDecoder::new(tar_gz);
     let mut archive = tar::Archive::new(tar);
-    archive
-        .unpack(target_dir)
-        .with_context(|| format!("Failed to unpack archive into {:?}", target_dir))?;
+
+    for entry_res in archive.entries()? {
+        let mut entry = entry_res?;
+        let entry_path = entry.path()?.to_path_buf();
+
+        // Prevent Tar Slip: entry path must be relative, not absolute, no '..' components
+        if entry_path.is_absolute() {
+            bail!("Unsafe entry path in archive: absolute path {:?}", entry_path);
+        }
+        for component in entry_path.components() {
+            if matches!(
+                component,
+                std::path::Component::ParentDir | std::path::Component::RootDir
+            ) {
+                bail!("Unsafe entry path in archive with traversal: {:?}", entry_path);
+            }
+        }
+
+        // Prevent extracting symlinks or hardlinks
+        let entry_type = entry.header().entry_type();
+        if entry_type.is_symlink() || entry_type.is_hard_link() {
+            bail!(
+                "Unsafe entry in archive: symlinks/hardlinks not permitted ({:?})",
+                entry_path
+            );
+        }
+
+        let dest_path = target_dir.join(&entry_path);
+        if let Some(parent) = dest_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        entry
+            .unpack(&dest_path)
+            .with_context(|| format!("Failed to unpack {:?} into {:?}", entry_path, dest_path))?;
+    }
 
     Ok(target_dir.to_path_buf())
 }
@@ -474,6 +526,140 @@ mod tests {
         let restored = restore_backup(&archived_dir.to_string_lossy(), &backup_root, &restore_dest)
             .expect("restore");
         assert!(restored.join("savegame.sav").exists());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_restore_verifies_archive_before_unpacking() {
+        let temp_dir = std::env::temp_dir().join("prefixpug_test_restore_verify");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let save_file = temp_dir.join("save.dat");
+        fs::write(&save_file, b"VALID_SAVE_PAYLOAD").unwrap();
+
+        let orphan = OrphanedPrefix {
+            appid: "111".to_string(),
+            title: Some("Test".to_string()),
+            classification: PrefixClassification::Orphaned,
+            library_path: PathBuf::from("/tmp"),
+            compatdata_path: Some(temp_dir.clone()),
+            compatdata_usage: DiskUsage::default(),
+            shadercache_path: None,
+            shadercache_usage: DiskUsage::default(),
+            detected_saves: vec![SaveFileInfo {
+                path: save_file,
+                size_bytes: 18,
+            }],
+            last_modified: None,
+            is_high_value: false,
+            high_value_reasons: vec![],
+            cloud_status: crate::vdf_parser::SteamCloudStatus::default(),
+            warnings: vec![],
+        };
+
+        let vault_root = temp_dir.join("vault");
+        let archived = backup_orphan_saves(&orphan, &vault_root).unwrap().unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let dir_mode = fs::metadata(&archived).unwrap().permissions().mode() & 0o777;
+            assert_eq!(dir_mode, 0o700, "vault directory mode must be 0700");
+            let manifest_mode =
+                fs::metadata(archived.join("manifest.json")).unwrap().permissions().mode() & 0o777;
+            assert_eq!(manifest_mode, 0o600, "manifest mode must be 0600");
+            let archive_mode =
+                fs::metadata(archived.join("saves.tar.gz")).unwrap().permissions().mode() & 0o777;
+            assert_eq!(archive_mode, 0o600, "archive mode must be 0600");
+        }
+
+        // Corrupt archive
+        let archive_file = archived.join("saves.tar.gz");
+        fs::write(&archive_file, b"corrupted garbage bytes").unwrap();
+
+        let restore_dest = temp_dir.join("restored");
+        let res = restore_backup(&archived.to_string_lossy(), &vault_root, &restore_dest);
+        assert!(res.is_err(), "Must reject restoring corrupted archive!");
+        let err_msg = res.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Backup integrity verification failed"),
+            "Expected integrity failure, got: {}",
+            err_msg
+        );
+        assert!(
+            !restore_dest.exists(),
+            "Destination directory should not be created if verification fails"
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_restore_rejects_unsafe_tar_entries() {
+        let temp_dir = std::env::temp_dir().join("prefixpug_test_restore_unsafe");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let vault_root = temp_dir.join("vault");
+        let backup_dir = vault_root.join("999_12345");
+        fs::create_dir_all(&backup_dir).unwrap();
+
+        // 1. Build tar containing a symlink entry
+        let archive_file = backup_dir.join("saves.tar.gz");
+        {
+            let file = File::create(&archive_file).unwrap();
+            let enc = GzEncoder::new(file, Compression::default());
+            let mut tar = Builder::new(enc);
+
+            let mut header = tar::Header::new_gnu();
+            header.set_size(0);
+            header.set_entry_type(tar::EntryType::Symlink);
+            header.set_link_name("/etc/passwd").unwrap();
+            header.set_cksum();
+            tar.append_data(&mut header, "evil_symlink", std::io::empty())
+                .unwrap();
+            let mut enc = tar.into_inner().unwrap();
+            enc.flush().unwrap();
+            enc.finish().unwrap();
+        }
+
+        let sha256 = compute_file_sha256(&archive_file).unwrap();
+        let manifest = BackupManifest {
+            appid: "999".to_string(),
+            title: Some("Traversal Test".to_string()),
+            timestamp: 12345,
+            total_save_size: 0,
+            tool_version: "0.2.1".to_string(),
+            archive_file: "saves.tar.gz".to_string(),
+            archive_sha256: sha256,
+            warnings: vec![],
+            files: vec![BackupEntry {
+                original_path: "/tmp/evil_symlink".to_string(),
+                relative_path: "evil_symlink".to_string(),
+                size_bytes: 0,
+                sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string(),
+            }],
+        };
+        fs::write(
+            backup_dir.join("manifest.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let restore_dest = temp_dir.join("restored");
+        let res = restore_backup(&backup_dir.to_string_lossy(), &vault_root, &restore_dest);
+        assert!(
+            res.is_err(),
+            "Restore must reject archives containing symlink entries!"
+        );
+        let err_msg = res.unwrap_err().to_string();
+        assert!(
+            err_msg.to_lowercase().contains("symlink") || err_msg.to_lowercase().contains("unsafe"),
+            "Error message should mention unsafe/symlink: {}",
+            err_msg
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
