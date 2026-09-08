@@ -258,7 +258,7 @@ fn is_blocklisted_save_entry(path: &Path) -> bool {
     false
 }
 
-/// The Pug's Nose: Sniffs through save roots using a blocklist.
+/// Save detection engine: sniffs through save roots using a blocklist.
 /// Archives all contents (extensionless, .json, .xml, .bin, .sav, etc.)
 /// minus known crash dumps, logs, and caches.
 /// Strictly enforces symlink safety (never follows symlinks escaping prefix).

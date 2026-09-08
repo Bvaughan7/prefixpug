@@ -4,7 +4,7 @@ Thank you for your interest in making **PrefixPug** better and safer! PrefixPug 
 
 ---
 
-## 🛡️ The Prime Directive
+## 🛡️ Core Safety Principles
 
 > **User Safety Above All.**  
 > If there is *any* ambiguity about whether a prefix is active, whether a file is a save, or whether an external drive is attached, PrefixPug **must resolve toward keeping the data**.
@@ -23,7 +23,7 @@ Before submitting any code changes, read [`SAFETY.md`](SAFETY.md) carefully to u
    Never delete paths directly from user input or relative paths. All deletion candidates must pass `scanner::validate_prefix_path_for_deletion()`, proving they are strictly children of `compatdata` or `shadercache`, have numeric AppID names, and are not system directories or root.
 4. **Symlink Isolation:**  
    Never follow symlinks during recursive directory scans or deletions (`WalkDir::follow_links(false)`). Escaping symlinks must be logged as warnings and skipped.
-5. **Atomic, fsynced Save Vaults:**  
+5. **Atomic, fsynced Save Archives:**  
    Before unlinking any prefix, all discovered save files must be archived to a compressed tarball, accompanied by an uncompressed `manifest.json` containing per-file and archive SHA-256 hashes, and flushed to disk via `File::sync_all()`.
 
 ---

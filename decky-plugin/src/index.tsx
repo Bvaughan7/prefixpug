@@ -102,7 +102,7 @@ const PrefixPugContent: FC<{ serverApi: ServerAPI }> = ({ serverApi }) => {
         </p>
         {!shadersOnly && (
           <p style={{ color: "#00ffff", fontSize: "12px", marginTop: "8px" }}>
-            🛡 The Pug's Nose will automatically vault all local save files to ~/.local/share/prefixpug/backups/ before deletion!
+            🛡 Save files are automatically backed up to ~/.local/share/prefixpug/backups/ before deletion.
           </p>
         )}
       </ConfirmModal>
@@ -110,11 +110,11 @@ const PrefixPugContent: FC<{ serverApi: ServerAPI }> = ({ serverApi }) => {
   };
 
   return (
-    <PanelSection title="PrefixPug Storage Sniffer">
+    <PanelSection title="PrefixPug Storage Cleaner">
       <PanelSectionRow>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={{ color: "#ff007f", fontWeight: "bold" }}>⚡ CYBERPUG DISK SENTINEL</div>
+            <div style={{ color: "#ff007f", fontWeight: "bold" }}>PREFIXPUG STORAGE CLEANER</div>
             <div style={{ fontSize: "12px", color: "#888" }}>{statusMsg}</div>
           </div>
           <DialogButton onClick={fetchOrphans} disabled={loading} style={{ minWidth: "40px" }}>

@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Beginner-Friendly Documentation & ELI5 Guides:** Comprehensive "Explain It Like I'm 5" breakdown and 30-second quickstart in `README.md` and GitHub Pages site (`web/index.html`) explaining prefixes, storage leaks, and save preservation.
+- **Beginner-Friendly Documentation & Conceptual Guides:** Comprehensive breakdown and 30-second quickstart in `README.md` and GitHub Pages site (`web/index.html`) explaining prefixes, storage leaks, and save preservation.
 - **Snap Steam Auto-Discovery:** Added standard Ubuntu Snap Steam candidate paths (`~/snap/steam/common/...`) to `default_library_vdf_path()`.
 - **Expanded Infrastructure Protection:** Added Steam Linux Runtime 4.0 (medic, `3387570`) and SteamVR (`250820`) to the permanent runtime deny-list.
 
@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Wine Registry Title Inference:** Filtered out Valve and Steam client registry stubs from falsely becoming inferred game titles.
 - **Save Blocklist Path Normalization:** Normalized backslashes to forward slashes before substring matching on excluded paths.
 - **Manpage Flags & Keybindings:** Corrected CLI options (`--library-vdf`, `--skip-backup`, `--ignore-running-steam`) and added missing keybindings (`/`, `?`/`h`, `i`) in `man/prefixpug.1`.
+
+### Changed
+- **Repositioning & Tone Hardening:** Shifted project positioning and documentation from promotional marketing language to an engineering-focused open-source utility. Grounded all safety claims directly in verifiable automated integration tests (`tests/integration_tests.rs`).
+- **Terminology Recalibration:** Replaced branding buzzwords ("The Pug's Nose", "Prime Directive", "CYBERPUG DISK SENTINEL", sprint classification labels) across documentation, CLI output, TUI modals, and Decky plugin with straightforward Unix utility terminology ("Save File Archiving", "Threat Model", "Safety Invariants").
+- **Threat Model Specification:** Overhauled `SAFETY.md` into a formal Threat Matrix and architectural specification linking threat vectors, consequences, and code guards to specific integration tests.
+- **Web & Manpage Alignment:** Updated `web/index.html` and `man/prefixpug.1` to reflect the grounded technical utility identity.
 
 ### Removed
 - **Obsolete Scratch Code:** Removed deprecated `examples/generate_frames.rs` test snippet.

@@ -8,9 +8,9 @@ This directory contains the **Decky Loader plugin** frontend and backend for Pre
 
 - **Quick Access Menu (QAM) Integration:** Access PrefixPug directly by pressing the `...` button in gaming mode.
 - **One-Tap Safe Reclamation:** Scans internal SSD and SD card (`/run/media/mmcblk0p1`) and calculates total reclaimable space.
-- **The Pug's Nose Safety:** Automatically vaults local saves to `~/.local/share/prefixpug/backups/` before deleting any prefix.
+- **Pre-Deletion Save Archiving:** Automatically archives local saves to `~/.local/share/prefixpug/backups/` before deleting any prefix.
 - **Zero-Risk Shader Cache Purge:** Clean GPU shader caches without touching any Wine/Proton prefixes.
-- **Save Vaulting per Title:** Extract and backup saves for any title on demand.
+- **On-Demand Save Archiving:** Extract and backup saves for any title on demand.
 
 ---
 

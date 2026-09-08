@@ -507,7 +507,7 @@
         <span>MIT Licensed</span>
       </div>
       <h1>Reclaim NVMe Storage <br><span class="gradient-text">Without Gambling Your Saves.</span></h1>
-      <p>A safety-first CLI and interactive TUI utility designed to sniff out and reclaim orphaned Steam/Proton compatdata prefixes and compiled shader caches on Linux and Steam Deck.</p>
+      <p>Safely reclaim 20–100 GB of storage from abandoned Steam/Proton compatdata prefixes and compiled shader caches on Linux and Steam Deck.</p>
 
       <div class="install-box">
         <span class="install-cmd" id="installCmd">curl -sSL https://raw.githubusercontent.com/Bvaughan7/prefixpug/main/install.sh | bash</span>
@@ -535,7 +535,7 @@
     </div>
   </section>
 
-  <!-- How It Works (ELI5) -->
+  <!-- How It Works -->
   <section class="container" id="how-it-works">
     <div class="section-title">
       <h2>The Problem, Explained Simply</h2>
@@ -562,9 +562,9 @@
       </div>
 
       <div class="feature-card">
-        <span class="feature-icon">🐾</span>
-        <h3>The PrefixPug Solution</h3>
-        <p>PrefixPug identifies real orphans, protects your custom games, <strong>automatically archives your saves into a safe vault</strong> before removal, and frees up your storage with zero stress.</p>
+        <span class="feature-icon">🛡️</span>
+        <h3>The Safe Solution</h3>
+        <p>PrefixPug identifies real orphans, protects your custom games, <strong>automatically archives your saves with SHA-256 manifests</strong> before removal, and frees up your storage safely.</p>
       </div>
     </div>
   </section>
@@ -591,14 +591,14 @@
 
       <div class="step-card">
         <span class="step-num">STEP 3</span>
-        <h3>Clean & Vault</h3>
-        <p>Press <code>c</code> to clean! PrefixPug automatically vaults all detected save files to <code>~/.local/share/prefixpug/backups/</code> before deletion.</p>
+        <h3>Clean & Archive</h3>
+        <p>Press <code>c</code> to clean! PrefixPug automatically archives all detected save files to <code>~/.local/share/prefixpug/backups/</code> before deletion.</p>
       </div>
 
       <div class="step-card">
         <span class="step-num">STEP 4</span>
         <h3>Instant Restore</h3>
-        <p>Changed your mind? Restore your vaulted save files anytime with a single command: <code>prefixpug restore &lt;BACKUP_ID&gt;</code>.</p>
+        <p>Changed your mind? Restore your archived save files anytime with a single command: <code>prefixpug restore &lt;BACKUP_ID&gt;</code>.</p>
       </div>
     </div>
   </section>
@@ -606,8 +606,8 @@
   <!-- Core Safety Guarantees -->
   <section class="container" id="safety">
     <div class="section-title">
-      <h2>The Prime Directive: Safety Above All</h2>
-      <p>Any ambiguity in drive mounts, active processes, or file types must resolve toward keeping the data. Never gamble a save to reclaim a few gigabytes.</p>
+      <h2>Safety Architecture & Threat Model</h2>
+      <p>Any ambiguity in drive mounts, active processes, or file types resolves toward keeping data. Never gamble a save to reclaim a few gigabytes.</p>
     </div>
 
     <div class="features-grid">
@@ -624,14 +624,14 @@
       </div>
 
       <div class="feature-card">
-        <span class="feature-icon">🐕</span>
-        <h3>The Pug's Nose (Save Vault)</h3>
-        <p>Inverts traditional extension allowlists. Sniffs entire directory trees (<code>Saved Games</code>, <code>Documents</code>, <code>AppData</code>) minus expendable caches, safely capturing extensionless, <code>.json</code>, and <code>.xml</code> saves.</p>
+        <span class="feature-icon">📂</span>
+        <h3>Directory-Root Save Detection</h3>
+        <p>Inverts traditional extension allowlists. Scans entire directory trees (<code>Saved Games</code>, <code>Documents</code>, <code>AppData</code>) minus expendable caches, safely capturing extensionless, <code>.json</code>, and <code>.xml</code> saves.</p>
       </div>
 
       <div class="feature-card">
         <span class="feature-icon">🔒</span>
-        <h3>Cryptographic Fsync Vaults</h3>
+        <h3>Cryptographic fsync Archives</h3>
         <p>Every save archive is compressed, audited with per-file SHA-256 hashes in <code>manifest.json</code>, and flushed with <code>File::sync_all()</code> before any prefix unlinking is permitted.</p>
       </div>
 
@@ -679,7 +679,7 @@
           <tr>
             <td><strong>Custom Local Saves</strong></td>
             <td class="danger-text">Silent, permanent data loss</td>
-            <td class="success-text">Automatic SHA-256 fsynced save vaults before unlinking</td>
+            <td class="success-text">Automatic SHA-256 fsynced save archives before unlinking</td>
           </tr>
           <tr>
             <td><strong>Active Game or Download</strong></td>
@@ -719,10 +719,10 @@
       <div class="cli-line"><span class="cli-comment"># Archive save files for an AppID on demand without deleting the prefix</span></div>
       <div class="cli-line"><span class="cli-cmd">prefixpug vault 1245620</span></div>
       <br>
-      <div class="cli-line"><span class="cli-comment"># Verify a save vault against its cryptographic SHA-256 manifest</span></div>
+      <div class="cli-line"><span class="cli-comment"># Verify an archived save backup against its cryptographic SHA-256 manifest</span></div>
       <div class="cli-line"><span class="cli-cmd">prefixpug verify-backup 1245620_1725408000</span></div>
       <br>
-      <div class="cli-line"><span class="cli-comment"># Restore vaulted save files to a target directory</span></div>
+      <div class="cli-line"><span class="cli-comment"># Restore archived save files to a target directory</span></div>
       <div class="cli-line"><span class="cli-cmd">prefixpug restore 1245620_1725408000 --target ~/RestoredSaves/</span></div>
       <br>
       <div class="cli-line"><span class="cli-comment"># Generate shell completions (bash, zsh, fish)</span></div>
@@ -735,7 +735,7 @@
     <div class="callout">
       <div class="callout-text">
         <h3>🎮 Steam Deck & Decky Loader Plugin</h3>
-        <p>PrefixPug includes a native SteamOS Decky Loader plugin with a React Quick Access Menu (QAM) interface. Clean shader caches and vault saves directly in Gaming Mode.</p>
+        <p>PrefixPug includes a native SteamOS Decky Loader plugin with a React Quick Access Menu (QAM) interface. Clean shader caches and archive saves directly in Gaming Mode.</p>
       </div>
       <a href="https://github.com/Bvaughan7/prefixpug/tree/main/decky-plugin" class="btn-gh">
         View Decky Plugin Docs →
@@ -753,7 +753,7 @@
         <a href="https://github.com/Bvaughan7/prefixpug/blob/main/SECURITY.md">Security Policy</a>
         <a href="https://github.com/Bvaughan7/prefixpug/blob/main/LICENSE">MIT License</a>
       </div>
-      <p>© 2026 Bryan Vaughan. Developed with safety as the prime directive.</p>
+      <p>© 2026 Bryan Vaughan. Open-source Linux & Steam Deck storage utility.</p>
     </div>
   </footer>
 

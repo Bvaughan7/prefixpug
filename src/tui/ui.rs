@@ -598,7 +598,7 @@ fn render_confirm_dialog(f: &mut Frame, app: &App, area: Rect) {
         ]),
         Line::from(""),
         Line::from(Span::styled(
-            "  The Pug's Nose will archive all detected saves to:",
+            "  All detected save files will be archived to:",
             Style::default().fg(COLOR_ACCENT),
         )),
         Line::from(Span::styled(

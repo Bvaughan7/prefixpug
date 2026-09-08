@@ -54,11 +54,11 @@ fn execute_clean(
 
     let mut cleaned_bytes = 0;
 
-    // 1. Vault saves first (The Pug's Nose) unless skip_backup or shaders_only is specified
+    // 1. Vault saves first before removal unless skip_backup or shaders_only is specified
     if !skip_backup && !shaders_only && !orphan.detected_saves.is_empty() {
         if let Some(archive_dir) = backup::backup_orphan_saves(orphan, backup_root)? {
             println!(
-                "  [Pug Vault] Buried {} save files -> {:?}",
+                "  [Backup] Archived {} save file(s) -> {:?}",
                 orphan.detected_saves.len(),
                 archive_dir
             );
@@ -505,7 +505,7 @@ fn run_vault_command(
     }
 
     println!(
-        "The Pug's Nose snuffed out {} save file(s) ({}) in prefix {}:",
+        "Discovered {} save file(s) ({}) in prefix {}:",
         prefix_to_vault.detected_saves.len(),
         format_bytes(
             prefix_to_vault

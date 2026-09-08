@@ -6,10 +6,10 @@ use std::path::PathBuf;
     name = "prefixpug",
     author,
     version,
-    about = "Safely sniffs out and reclaims orphaned Steam/Proton compatdata and shader caches",
+    about = "Safely identifies and reclaims orphaned Steam/Proton compatdata and shader caches",
     long_about = "A safe Rust utility to reclaim storage by identifying orphaned Steam/Proton \
                   compatdata and shader caches. Protects non-Steam shortcuts, respects multi-library \
-                  mounts, and automatically archives local save files to an fsynced vault before removal."
+                  mounts, and automatically archives local save files with SHA-256 manifests before removal."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -102,22 +102,22 @@ pub enum Commands {
         yes: bool,
     },
 
-    /// Sniff and archive save files for an AppID prefix without deleting the prefix
+    /// Archive save files for an AppID prefix without deleting the prefix
     Vault {
         /// Target AppID or prefix path
         appid: String,
     },
 
-    /// List all archived save vaults created by PrefixPug
+    /// List all archived save backups created by PrefixPug
     Backups,
 
-    /// Verify an archived save vault against its manifest and SHA-256 checksums
+    /// Verify an archived save backup against its manifest and SHA-256 checksums
     VerifyBackup {
         /// Backup folder name or full path (from `prefixpug backups`)
         backup_id: String,
     },
 
-    /// Restore save files from an archived backup vault
+    /// Restore save files from an archived backup
     Restore {
         /// Backup folder name or full path (from `prefixpug backups`)
         backup_id: String,

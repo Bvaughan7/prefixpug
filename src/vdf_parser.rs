@@ -562,7 +562,7 @@ pub fn discover_non_steam_shortcuts(steam_roots: &[PathBuf]) -> Result<HashMap<S
 
                 let parsed = parse_shortcuts_vdf_bytes(&bytes).with_context(|| {
                     format!(
-                        "P0-2 Error: Corrupt or unparseable shortcuts.vdf at {:?}. \
+                        "Safety Error: Corrupt or unparseable shortcuts.vdf at {:?}. \
                          Aborting to prevent deleting active non-Steam game prefixes.",
                         shortcuts_vdf
                     )
